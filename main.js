@@ -1,5 +1,5 @@
 // If you're looking at the code, that's awesome! Leave a comment on Itch if you need help!
-// (You can also find the repo at https://github.com/alexander-i-yang/Cave-Toss/tree/ascend)
+// (You can also find the repo at https://github.com/alexander-i-yang/minigame)
 // From Yam (the Dev)
 const canvas = document.createElement("canvas");
 
@@ -49,6 +49,12 @@ const BAT_SPRITESHEET = document.getElementById("bat-spritesheet");
 const DEATH_SPRITESHEET = document.getElementById("death-spritesheet");
 const TITLE_IMG = document.getElementById("title-img");
 const ARROW_IMG = document.getElementById("arrow-img");
+
+const POWERUP_JUMP_SPRITE = document.getElementById("powerup-jump");
+const POWERUP_SLIDE_SPRITE = document.getElementById("powerup-slide");
+const POWERUP_DJ_SPRITE = document.getElementById("powerup-dj");
+
+const SPECIAL_MAP = document.getElementById("special-map");
 
 let game;
 
@@ -418,6 +424,15 @@ function bezier(ti, x1, x2, y1, y2) {
 	return (t * (t * t + 3 * ti * ti * y1 + 3 * ti * t * y2));
 }
 
+function clampedQuadratic(t, scale, zero, cutoff) {
+	let py = scale * t * (t - zero);
+	if (t > cutoff) {
+		const cutoffSpeed = 2 * scale * cutoff - scale * zero;
+		py = cutoffSpeed * (t - cutoff) + scale * cutoff * (cutoff - zero);
+	}
+	return py;
+}
+
 function getWidthOfText(txt, size) {
 	let ret = 0;
 	const letters = txt.split("");
@@ -517,19 +532,19 @@ const CAVE_AMBIANCE = new Howl({
 	src: ['Songs/cavesounds1.ogg'], loop: true,
 });
 const HEADER_MUSIC = new Howl({
-	src: ['Songs/rainforestStart.ogg'], loop: false,
+	src: ['Songs/velvetOpening.ogg'], loop: false,
 });
 const LOOP1_MUSIC = new Howl({
-	src: ['Songs/rainforestStartLoop.ogg'], loop: false,
+	src: ['Songs/velvet1.ogg'], loop: false,
 });
 const LOOP2_MUSIC = new Howl({
-	src: ['Songs/rainforestLoop2.ogg'], loop: false,
+	src: ['Songs/velvet2.ogg'], loop: false,
 });
 const LOOP3_MUSIC = new Howl({
-	src: ['Songs/rainforestLoop3.ogg'], loop: false,
+	src: ['Songs/velvet3.ogg'], loop: false,
 });
 const END_MUSIC = new Howl({
-	src: ['Songs/Signals - End.ogg'], loop: true,
+	src: ['Songs/velvetCredits.ogg'], loop: true,
 });
 const DEATH_SFX = new Howl({
 	src: ['sfx/Death.wav'], loop: false,
@@ -557,15 +572,11 @@ const DJUMP_SFX = new Howl({
 });
 
 const UNLOCK_SFX = new Howl({
-	src: ['sfx/unlock.ogg'], loop: false,
+	src: ['sfx/pianoPickup.ogg'], loop: false,
 });
 
 const BUTTON_SFX = new Howl({
-	src: ['sfx/button2.ogg'], loop: false,
-});
-
-const BIG_BUTTON_SFX = new Howl({
-	src: ['sfx/bigButton.ogg'], loop: false,
+	src: ['sfx/bigButton.wav'], loop: false,
 });
 
 const PING_SFX = new Howl({
@@ -585,10 +596,14 @@ const CORRECT_SFX = new Howl({
 });
 
 const MAX_VOLS = {
-	STAGE2_MUSIC: 0.75,
 	PICKUP_SFX: 0.5,
 	SPRING_SFX: 0.5,
-	CAVE_AMBIANCE: 0.5,
+	CAVE_AMBIANCE: 1,
+	
+	HEADER_MUSIC: 0.5,
+	LOOP1_MUSIC: 0.5,
+	LOOP2_MUSIC: 0.5,
+	LOOP3_MUSIC: 0.5,
 };
 
 class AudioController {
@@ -614,20 +629,25 @@ class AudioController {
 		this.ambiance = ambiance;
 	}
 
-	playSong(song) {
+	playSong(song, stopOnEnd) {
 		this.nowPlaying = song._src;
 		song.volume(this.getMaxVolume(song) * this.musicVolume);
 		this.curSongId = song.play();
 		this.curSong = song;
 
-		this.curSong.on('end', () => {
-			this.playSong(this.curSong);
-		}, this.curSongId)
+		if (!stopOnEnd) {
+			this.curSong.on('end', () => {
+				this.playSong(this.curSong);
+			}, this.curSongId)
+		}
 	}
 
 	fadeOutSong(ms) {
-		this.curSong.on('fade', this.stopSong);
-		this.curSong.fade(1, 0, ms,);
+		//this.curSong.on('end', this.stopSong, this.curSongId);
+		//this.curSong.fade(1, 0, ms, this.curSongId);
+		this.ambiance.fade(1, 0, ms);
+		this.curSong.fade(1,0,ms,this.curSongId);
+		this.curSong.off('end');
 	}
 
 	stopSong() {
@@ -1308,6 +1328,7 @@ class Game {
 		this.startTime = window.performance.now();
 		this.lastFacing = VectorRight;
 		this.lastSliding = false;
+		this.canDoubleJump = false;
 
 		this.map = new WorldMap(this);
 		this.numLevels = levelData.numLevels;
@@ -1318,8 +1339,8 @@ class Game {
 			// if(levelInd === 0) {level = new StartScreen(sliceArr, this);}
 
 			const arrCopy = [...sliceArr];
-			if (levelInd === this.numLevels - 1) {
-				level = new EndScreen(sliceArr, this);
+			if (levelInd === 2) {
+				level = new EndScreen(sliceArr, this, levelInd);
 			} else {
 				level = new Level(sliceArr, this, levelInd);
 			}
@@ -1328,7 +1349,7 @@ class Game {
 
 			this.levels.push(level);
 		}
-		this.levelInd = 7;
+		this.levelInd = 12;
 		this.visitedLevels[this.levelInd] = true;
 
 		this.cameraOffset = Vector({x: 0, y: 0});
@@ -1338,7 +1359,7 @@ class Game {
 		this.animTime = 0;
 		this.screenShakeFrames = 0;
 		this.scoreboardRect = new Rectangle(4, 4, 44, 19);
-		this.scoreboardFrames = 90;
+		this.scoreboardFrames = 0;
 		this.secondsUntilBat = Math.round(Math.random() * 10 + 5);
 		this.cheated = false;
 		this.emptySquareData = {x: -1, y: -1, rad: -1, color: null};
@@ -1350,9 +1371,9 @@ class Game {
 
 		this.unlockScreen = new UnlockScreen(this);
 		this.unlocks = {
-			JUMP: true,
-			SLIDE: true,
-			DJ: true,
+			JUMP: false,
+			SLIDE: false,
+			DJ: false,
 		}
 
 		audioCon.playAmbiance(CAVE_AMBIANCE);
@@ -1391,31 +1412,31 @@ class Game {
 	}
 
 	onBigButtonPush(curHeight) {
-		audioCon.playSoundEffect(BIG_BUTTON_SFX);
+		// audioCon.playSoundEffect(BUTTON_SFX);
 
-		switch (curHeight) {
-			case 3:
-				this.unlocks.DJ = true;
-			case 2:
-				this.unlocks.SLIDE = true;
-			case 1:
-				this.unlocks.JUMP = true;
-				audioCon.playSoundEffect(UNLOCK_SFX);
-				break;
-		}
+		// switch (curHeight) {
+		// 	case 3:
+		// 		this.unlocks.DJ = true;
+		// 	case 2:
+		// 		this.unlocks.SLIDE = true;
+		// 	case 1:
+		// 		this.unlocks.JUMP = true;
+		// 		audioCon.playSoundEffect(UNLOCK_SFX);
+		// 		break;
+		// }
 
-		switch (curHeight) {
-			case 3:
-				audioCon.queueSong(LOOP3_MUSIC);
-				break;
-			case 2:
-				audioCon.queueSong(LOOP2_MUSIC);
-				break;
-			case 1:
-				audioCon.playSong(HEADER_MUSIC);
-				audioCon.queueSong(LOOP1_MUSIC);
-				break;
-		}
+		// switch (curHeight) {
+		// 	case 3:
+		// 		audioCon.queueSong(LOOP3_MUSIC);
+		// 		break;
+		// 	case 2:
+		// 		audioCon.queueSong(LOOP2_MUSIC);
+		// 		break;
+		// 	case 1:
+		// 		audioCon.playSong(HEADER_MUSIC);
+		// 		audioCon.queueSong(LOOP1_MUSIC);
+		// 		break;
+		// }
 	}
 
 	resetFellHeight() {
@@ -1458,7 +1479,7 @@ class Game {
 	drawScoreboard() {
 		// const backgroundRect = new Rectangle(this.scoreboardRect.getX()-1, this.scoreboardRect.getY()-1, this.scoreboardRect.width+2, this.scoreboardRect.height+2);
 		// drawOnCanvas(backgroundRect, "#7e2553");
-		drawOnCanvas(this.scoreboardRect, "#00000080");
+		drawOnCanvas(this.scoreboardRect, "#000000d0");
 		writeText(this.formatTimeSinceStart(), 1, Vector({
 			x: this.scoreboardRect.getX() + 2,
 			y: this.scoreboardRect.getY() + 2
@@ -1487,12 +1508,17 @@ class Game {
 			if (keys["KeyI"] && !this.prevI) {
 				this.getCurrentLevel().onButtonPush();
 			}
+
+			keys["PrevKeyZ"] = this.prevZ;
+
 			this.prevO = keys["KeyO"];
 			this.prevH = keys["KeyH"];
 			this.prevJ = keys["KeyJ"];
 			this.prevK = keys["KeyK"];
 			this.prevI = keys["KeyI"];
 			this.prevS = keys["KeyP"];
+			this.prevZ = keys["KeyZ"];
+
 			if (keys["KeyC"]) {
 				this.scoreboardFrames += 1;
 				this.showMap = true;
@@ -1510,8 +1536,7 @@ class Game {
 	}
 
 	onLastLevel() {
-		return false;
-		// return this.levelInd + 1 === this.numLevels;
+		return this.levelInd === 2;
 	}
 
 	updateLevelPhysicsPos() {
@@ -1530,7 +1555,7 @@ class Game {
 				if (this.screenShakeFrames > 0) {
 					this.shakeScreen();
 				}
-				if (this.scoreboardFrames > 0 && !this.onLastLevel()) {
+				if (this.scoreboardFrames > 0) {
 					this.scoreboardFrames -= 1;
 				}
 			}
@@ -1546,11 +1571,6 @@ class Game {
 
 		this.levelInd = ind;
 		this.visitedLevels[ind] = true;
-
-		if (this.bigUnlocked && ind === 3 && this.fellFromHeight <= 1 && !this.unlocks.JUMP) {
-			audioCon.playSong(HEADER_MUSIC);
-			audioCon.queueSong(LOOP1_MUSIC);
-		}
 		/*if(this.levelInd > 0 && this.levelInd < 11) {
             if(audioCon.curSong._src !== STAGE1_MUSIC._src && audioCon.curSong._src !== BEGINNING_MUSIC._src) {audioCon.playSong(STAGE1_MUSIC);}
             else {audioCon.queueSong(STAGE1_MUSIC);}
@@ -1560,7 +1580,7 @@ class Game {
         }*/
 		this.getCurrentLevel().setCurrentSpawn(direction, playerPos);
 		this.getCurrentLevel().resetStage(true);
-		if (direction === Direction.NORTH) this.getPlayer().setYVelocity(this.lastYVelocity);
+		this.getPlayer().setYVelocity(this.lastYVelocity);
 
 		this.respawn();
 		if (this.onLastLevel()) {
@@ -1570,6 +1590,7 @@ class Game {
 			this.nanosecondsSinceStart = () => {
 				return t - this.startTime;
 			};
+			this.scoreboardFrames = 1000000;
 			audioCon.fadeOutSong(750);
 		}
 	}
@@ -1619,11 +1640,80 @@ class Game {
 		}
 	}
 
+	spawnSlideParticles(x, y, facing) {
+		for (let i = 0; i < 5; ++i) {
+			const spawnY = y + Math.random() * 5;
+			const spawnX = x + Math.random() * 2;
+			const curLevel = this.getCurrentLevel();
+
+			const r0 = Math.random() * 20;
+			const r1 = Math.random() * 20;
+			const r2 = Math.random() / 10;
+			
+			function p(t) {
+				const px = clampedQuadratic(t, facing * (120+r0), 0.7, 0.33);
+				const py = clampedQuadratic(t, (50+r1), (0.6 + r2), (0.6 + r2) / 2 + r2);
+				return {x: spawnX + px, y: spawnY + py};
+			}
+			const dust = new Particle(curLevel, "#ffa300", p, Vector({x:1,y:1}));
+			curLevel.pushDecoration(dust);
+		}
+	}
+
 	spawnSlideDust(x, y, facing) {
 		const spawnX = x + Math.random() * 2;
 		const curLevel = this.getCurrentLevel();
-		const dust = new SlideDust(spawnX, y, facing, curLevel);
+
+		const r0 = Math.random() * 20;
+		const r1 = Math.random() * 20;
+		const r2 = Math.random() / 10;
+
+		const size = Math.ceil(Math.random() * 2);
+		
+		function p(t) {
+			const px = clampedQuadratic(t, facing * (120+r0), 0.7, 0.33);
+			const py = clampedQuadratic(t, (100+r1), (0.6 + r2), (0.6 + r2) / 2 + r2);
+			return {x: spawnX + px, y: y + py};
+		}
+		const dust = new Particle(curLevel, "#ffa300", p, Vector({x:size,y:size}));
 		curLevel.pushDecoration(dust);
+	}
+
+	spawnDoubleJumpParticles(x, y) {
+		for (let i = 0; i < 5; ++i) {
+			const spawnX = x + Math.random() * 2;
+			const curLevel = this.getCurrentLevel();
+
+			const r0 = Math.random() * 10;
+			const r1 = Math.random() * 10;
+			const r2 = Math.random() / 10;
+			
+			function p(t) {
+				const px = clampedQuadratic(t, (30+r0) * (i - 3), 0.7, 0.33);
+				const py = clampedQuadratic(t, -(130+r1), (0.6 + r2), (0.6 - r2) / 2 - r2);
+				return {x: spawnX + px, y: y + py};
+			}
+			const dust = new Particle(curLevel, "#188755", p, Vector({x:1,y:1}));
+			curLevel.pushDecoration(dust);
+		}
+	}
+
+	spawnPowerupParticles(x, y, color) {
+		for (let i = 0; i < 12; ++i) {
+			const spawnX = x + Math.random() * 2;
+			const curLevel = this.getCurrentLevel();
+
+			const r0 = Math.random() * 10;
+			const r1 = Math.random() * 10;
+			const r2 = Math.random() / 10;
+			function p(t) {
+				const px = clampedQuadratic(t, (30+r0) * (i - 6), 0.7, 0.33);
+				const py = clampedQuadratic(t, (130+r1), (0.6 + r2), (0.6 - r2) / 2 - r2);
+				return {x: spawnX + px, y: y + py};
+			}
+			const dust = new Particle(curLevel, color, p, Vector({x:2,y:2}));
+			curLevel.pushDecoration(dust);
+		}
 	}
 
 	shakeScreen() {
@@ -1654,6 +1744,10 @@ class Game {
 			this.cheated = true;
 			this.setLevel(ind + 1);
 		}
+	}
+
+	showHintText(text, pos) {
+		this.getCurrentLevel().showHintText(text, pos);
 	}
 }
 
@@ -1843,7 +1937,9 @@ class WorldMap {
 
 		drawOnCanvas(new Rectangle(16 + offset.x - 1, offset.y + 15, ((16 + margin) * roomsW) + 3, (16 + margin) * roomsH + 3), "#FFCCAA");
 		drawOnCanvas(new Rectangle(16 + offset.x, offset.y + 16, ((16 + margin) * roomsW) + 1, (16 + margin) * roomsH + 1), "#1E2B53");
-		this.mapSections.forEach(m => {
+		this.mapSections.forEach((m, i) => {
+			if ([0,1,3,4].includes(i)) return;
+
 			const x = (m.level.location.x + 1) * (TILE_MAP_SIZE[0] + margin) + offset.x;
 			const y = (m.level.location.y + 1) * (TILE_MAP_SIZE[1] + margin) + offset.y;
 			m.draw(x, y);
@@ -1881,6 +1977,13 @@ class MapSec {
 
 	draw(offsetX, offsetY) {
 		if (this.level.myLevelInd === undefined) return;
+		if (this.level.myLevelInd === 2) {
+			if (!this.hasVisited()) {
+				CTX.drawImage(SPECIAL_MAP, offsetX, offsetY);
+				return;
+			}
+		}
+		
 		if (!this.hasVisited()) {
 			let i = 0;
 			for (let y = 0; y < TILE_MAP_SIZE[1]; y++) {
@@ -2047,6 +2150,53 @@ class Level {
 					case 20:
 						this.solids.push(new Collectible(gameSpaceX, gameSpaceY));
 						break;
+					case 21:
+						let onPush;
+						let sprite;
+						let x = gameSpaceX - 2;
+						let y = gameSpaceY - 2;
+						let diamond = false;
+						
+						const onPickup = (unlock, particleColor, music, hintText, hintTextPos) => {
+							game.unlocks[unlock] = true;
+							audioCon.playSoundEffect(UNLOCK_SFX);
+							audioCon.queueSong(music);
+							game.spawnPowerupParticles(x, y, particleColor);
+							game.showHintText(hintText, hintTextPos);
+						}
+						
+						switch (tileCode) {
+							case 84:
+								onPush = () => {
+									audioCon.playSong(HEADER_MUSIC);
+									onPickup("JUMP", "#ff004d", LOOP1_MUSIC, "Press z to jump", Vector({x: 34, y:32}));
+								}
+								sprite = POWERUP_JUMP_SPRITE;
+								break;
+							case 85:
+								x += 4;
+								onPush = () => onPickup("SLIDE", "#ffa300", LOOP2_MUSIC, "Press x to slide through spikes", Vector({x: 3, y:8}));
+								sprite = POWERUP_SLIDE_SPRITE;
+								break;
+							case 86:
+								x+=4;
+								onPush = () => onPickup("DJ", "#188755", LOOP3_MUSIC, "Jump in midair to double jump", Vector({x: 8, y:8}));
+								sprite = POWERUP_DJ_SPRITE;
+								break;
+							case 87:
+								x+=4;
+								onPush = () => {
+									game.endGame();
+									audioCon.playSoundEffect(GEM_PICKUP_SFX);
+									audioCon.playSong(END_MUSIC);
+								}
+								sprite = DIAMOND_IMG;
+								this.solids.push(new DiamondPowerup(x, y, this, onPush, sprite));
+								diamond = true;
+								break;
+						}
+						if (!diamond) this.solids.push(new Powerup(x, y, this, onPush, sprite));
+						break;
 					//Meta
 					case 64:
 						const height = tileCode % 4;
@@ -2070,6 +2220,9 @@ class Level {
 		this.location = Vector({x: locationX, y: locationY});
 		this.endLevelFrames = 0;
 		this.opacity = 0;
+
+		if (this.myLevelInd === 19) this.hintText = {text: "Hold c for map", pos: Vector({x: 8, y:12})}
+		if (this.myLevelInd === 12) this.hintText = {text: "Arrow keys to move", pos: Vector({x: 24, y:32})}
 	}
 
 	setCurrentSpawn(direction, playerPos) {
@@ -2111,9 +2264,21 @@ class Level {
 		if (this.throwable) this.throwable.draw();
 		this.player.draw();
 		this.dustSprites.forEach(i => i.draw());
-		// writeText("HOLD C FOR MAP", 1, textPos, "white");
-		// if (this.myLevelInd === 6) writeText("Hold c for map", 1, Vector({x: 32, y:32}), "white");
+		
+		if (this.hintText) {
+			const t = this.hintText.text;
+			const p = this.hintText.pos;
+			this.drawHintText(t, p);
+		}
+		
 		this.drawFade();
+	}
+
+	drawHintText(text, pos) {
+		const color = game.animFrame % 30 < 15 ? "#fff1e8" : "#C2C3C7";
+		const yAdd = Math.round(2 * Math.sin(game.animFrame * 2 * Math.PI / 60));
+		pos = pos.addPoint(Vector({x: 0, y: yAdd}));
+		writeText(text, 1, pos, color);
 	}
 
 	spawnBat() {
@@ -2207,8 +2372,8 @@ class Level {
 		if (nextLevelDir && this.endLevelFrames === 0) {
 			this.nextDirection = this.nextLevelDir();
 			this.nextLevelPlayerPos = this.getPlayer().getPos();
+			if (this.myLevelInd === 12) this.hintText = false;
 			this.game.nextLevel(this.nextDirection, this.nextLevelPlayerPos);
-			// this.endLevelFrames = 32;
 		}
 		if (this.endLevelFrames === 1) {
 			this.game.nextLevel(this.nextDirection, this.nextLevelPlayerPos);
@@ -2342,6 +2507,7 @@ class Level {
 		if (transitioning) {
 			this.player.respawnFrames = 0;
 			this.player.sliding = this.game.lastSliding;
+			this.player.canDoubleJump = this.game.lastCanDoubleJump;
 		} else {
 			this.currentSpawn = Vector({x: this.spawn.x, y: this.spawn.y});
 		}
@@ -2418,6 +2584,10 @@ class Level {
 		CTX.fillStyle = `rgba(0, 0, 0, ${this.opacity})`;
 		CTX.fillRect(-10, -10, canvas.width + 20, canvas.height + 20);
 	};
+
+	showHintText(text, pos) {
+		this.hintText = {text: text, pos: pos};
+	}
 }
 
 /*class StartScreen extends Level{
@@ -2520,35 +2690,11 @@ const CREDITS = [{
 	"size": 2,
 	"paddingY": 24,
 }, {
-	"text": "Game Design:",
+	"text": "A Game By:",
 	"size": 1,
 	"paddingY": 16
 }, {
-	"text": "Alex Yang",
-	"size": 1,
-	"paddingY": 8,
-}, {
-	"text": "Programming:",
-	"size": 1,
-	"paddingY": 24,
-}, {
-	"text": "Alex Yang",
-	"size": 1,
-	"paddingY": 8,
-}, {
-	"text": "Main Art:",
-	"size": 1,
-	"paddingY": 24,
-}, {
-	"text": "Alex Yang",
-	"size": 1,
-	"paddingY": 8,
-}, {
-	"text": "Diamond Art:",
-	"size": 1,
-	"paddingY": 24,
-}, {
-	"text": "Kicked-in-Teeth",
+	"text": "yamEater20",
 	"size": 1,
 	"paddingY": 8,
 }, {
@@ -2566,7 +2712,11 @@ const CREDITS = [{
 	"size": 1,
 	"paddingY": 24,
 }, {
-	"text": "Signals By Lance Conrad",
+	"text": "Velvet Waves",
+	"size": 1,
+	"paddingY": 8,
+}, {
+	"text": "By Lance Conrad",
 	"size": 1,
 	"paddingY": 8,
 }, {
@@ -2586,27 +2736,19 @@ const CREDITS = [{
 	"size": 1,
 	"paddingY": 8,
 }, {
-	"text": "Playtesters:",
+	"text": "Playtesting:",
 	"size": 1,
 	"paddingY": 24,
 }, {
-	"text": "Sachin Allums",
+	"text": "Cathy Lin",
 	"size": 1,
 	"paddingY": 8,
 }, {
-	"text": "M. Yang",
-	"size": 1,
-	"paddingY": 8,
-}, {
-	"text": "Special Thanks",
+	"text": "Special Thanks:",
 	"size": 1,
 	"paddingY": 24,
 }, {
 	"text": "G+S Yang",
-	"size": 1,
-	"paddingY": 8,
-}, {
-	"text": "Mark Brown (GMTK)",
 	"size": 1,
 	"paddingY": 8,
 }, {
@@ -2617,13 +2759,17 @@ const CREDITS = [{
 	"text": "And the player",
 	"size": 1,
 	"paddingY": 8,
+}, {
+	"text": "Press R to restart",
+	"size": 1,
+	"paddingY": 64,
 }
 
 ];
 
 class EndScreen extends Level {
-	constructor(tileArr, game) {
-		super(tileArr, game);
+	constructor(tileArr, game, levelInd) {
+		super(tileArr, game, levelInd);
 		this.endGameFrames = 0;
 		this.endWalkFrames = 0;
 	}
@@ -2639,12 +2785,18 @@ class EndScreen extends Level {
 			this.fade(1 - (this.endGameFrames / (ENDGAME_ANIM_FRAMES - ENDGAME_OFFSET_FRAMES)));
 			this.endGameFrames -= 1;
 			this.drawFade();
+			const diamond = this.solids.find(e => e.isDiamond);
+			if (diamond) diamond.draw();
 		} else if (this.endGameFrames === 1) {
 			this.fade(1 - (this.endGameFrames / (ENDGAME_ANIM_FRAMES - ENDGAME_OFFSET_FRAMES)));
 			this.drawFade();
 			this.centerPlayer();
 			if (this.endWalkFrames === 0) {
 				this.endWalkFrames = ENDGAME_WALK_OFFSET_FRAMES;
+			}
+			const diamond = this.solids.find(e => e.isDiamond);
+			if (diamond) {
+				diamond.draw();
 			}
 		}
 		if (this.endWalkFrames > 1) {
@@ -2673,9 +2825,12 @@ class EndScreen extends Level {
 
 	centerPlayer() {
 		if (game.animFrame % 3 === 0) {
-			const targetX = PIXEL_GAME_SIZE[0] / 2;
-			const targetY = -1000 - this.player.getY();
+			const targetX = PIXEL_GAME_SIZE[0] / 2 - 2;
 			if (this.player.getX() !== targetX) this.player.moveX(Math.sign(targetX - this.player.getX()), this.player.onCollide);
+		}
+
+		if (game.animFrame % 5 === 0) {
+			const targetY = -1000 - this.player.getY();
 			if (this.game.cameraOffset.y !== targetY) game.cameraOffset.y += Math.sign(targetY);
 		}
 	}
@@ -2686,6 +2841,12 @@ class EndScreen extends Level {
 	}
 
 	setKeys(keys) {
+		if (this.endGameFrames === 1) {
+			if (keys["KeyR"]) {
+				window.location.reload();
+			}
+		}
+		
 		if (this.endGameFrames === 0) {
 			super.setKeys(keys);
 		} else {
@@ -2915,33 +3076,34 @@ class BrownDust extends Decoration {
 	}
 }
 
-class SlideDust extends Decoration {
-	constructor(x, y, facing, level) {
-		super(x, y, null, level);
-		this.facing = facing;
-		this.vy = -2;
-		this.vx = facing * -3;
+class Particle extends Decoration {
+	constructor(level, color, positionFunction, size) {
+		super(0, 0, null, level);
 		this.frames = 120;
+		this.color = color;
+		this.size = size;
+		this.positionFunction = positionFunction;
 	}
 
 	draw() {
-		let thing = (this.frames) * 255 / 120;
-		thing = Math.ceil(thing).toString(16);
-		CTX.fillStyle = "#5f574f" + thing;
-		CTX.fillRect(Math.round(this.x), Math.round(this.y), 2, 2);
+		if (this.frames <= 0 || this.frames === 120) return;
+
+		let alpha = (this.frames) * 255 / 120;
+		alpha = Math.ceil(alpha).toString(16).padStart(2, "0");
+		CTX.fillStyle = this.color + alpha;
+		CTX.fillRect(Math.round(this.x), Math.round(this.y), this.size.x, this.size.y);
 	}
 
 	update() {
-		this.vy += 0.11;
-		this.vx = this.vx + Math.sign(this.vx) * -0.15;
-		this.x += this.vx;
-		this.y += this.vy;
-		this.vy = Math.min(this.vy, 0.3);
+		if (this.frames <= 0) {
+			this.level.removeDecoration(this);
+			return;
+		}
 
 		this.frames--;
-		if (this.frames < 0) {
-			this.level.removeDecoration(this);
-		}
+		const p = this.positionFunction((120-this.frames) / 120);
+		this.x = p.x;
+		this.y = p.y;
 	}
 }
 
@@ -3125,7 +3287,6 @@ class Actor extends PhysObj {
 			const carryingObj = this.getCarrying();
 			while (remainder !== 0) {
 				let collideObj = this.collideOffset(direction);
-				// console.log(collideObj);
 				if (collideObj && collideObj !== carryingObj) {
 					const shouldBreak = onCollide(collideObj);
 					if (shouldBreak) {
@@ -3248,7 +3409,6 @@ class Semisolid extends Solid {
 		const p = this.level.getPlayer();
 		const b = p.getY() + p.getHeight() <= this.getY();
 		if (b) return "wall";
-		if (p.isTouching(this.getHitbox())) console.trace();
 		return "semi";
 	}
 }
@@ -3710,10 +3870,10 @@ class DiamondThrowable extends StickyThrowable {
 		const radOff = 0.5 * Math.sin(game.animFrame / 30 * Math.PI);
 		for (let i = 0; i < numLines; ++i) {
 			let angle = 2 * Math.PI * (i + game.animFrame / 30) / numLines;
-			CTX.fillStyle = "#ffa200a0";
+			CTX.fillStyle = "#7e2553a0";
 			this.drawLineAround(this.getX() + 2, this.getY() + 2, angle, 20, 28 + radOff);
 			if (i % 2 === 0) {
-				CTX.fillStyle = "#ffed27e0";
+				CTX.fillStyle = "#ff004de0";
 				this.drawLineAround(this.getX() + 2, this.getY() + 2, -angle, 8, 16);
 			}
 		}
@@ -3736,7 +3896,6 @@ class Player extends Actor {
 		this.facing = VectorRight;
 		this.carrying = null;
 		this.prevXKey = 0;
-		this.prevZKey = 0;
 		this.jumpJustPressed = 0;
 		this.xJustPressed = 0;
 		this.coyoteTime = 0;
@@ -3935,6 +4094,7 @@ class Player extends Actor {
 		this.setYVelocity(-2);
 		this.canDoubleJump = false;
 		audioCon.playSoundEffect(DJUMP_SFX);
+		game.spawnDoubleJumpParticles(this.getX(), this.getY());
 	}
 
 	isOverlap(physObj, offset) {
@@ -3952,7 +4112,7 @@ class Player extends Actor {
 
 		if (this.carrying.onPlayerCollide().includes("diamond")) {
 			audioCon.playSoundEffect(GEM_PICKUP_SFX, () => {
-				audioCon.playSong(END_MUSIC);
+				audioCon.playSong(END_MUSIC, true);
 				audioCon.queueSong(null)
 			});
 		} else {
@@ -3965,9 +4125,9 @@ class Player extends Actor {
 	setKeys(keys) {
 		if (this.getGame().debugFlying) {
 			if (keys["ArrowRight"]) {
-				this.setXVelocity(10);
+				this.setXVelocity(2);
 			} else if (keys["ArrowLeft"]) {
-				this.setXVelocity(-10);
+				this.setXVelocity(-2);
 			} else {
 				this.setXVelocity(0);
 			}
@@ -3979,14 +4139,18 @@ class Player extends Actor {
 			} else {
 				this.setYVelocity(0);
 			}
+			return;
 		}
 
 		const onGround = this.isOnGround();
 		const slidePressed = keys["KeyX"] && this.getGame().unlocks.SLIDE;
 
 		if (this.respawnFrames === 0 && this.deathFrames === 0) {
-			if (slidePressed && onGround) {
+			if (slidePressed && onGround && !this.sliding && this.slideBumpFrames <= 0) {
+				this.getGame().startScreenShake();
+				audioCon.playSoundEffect(THROW_SFX);
 				this.sliding = true;
+				game.spawnSlideParticles(this.getX(), this.getY(), this.facing.x);
 			}
 
 			if (onGround && !onGround.onPlayerCollide().includes("button")) this.getGame().resetFellHeight();
@@ -3996,6 +4160,7 @@ class Player extends Actor {
 			}
 			if (this.sliding) {
 				this.setXVelocity(this.facing.x * 2);
+				if (onGround && this.sprite.getRow() === 0) this.sprite.setRow(1);
 			} else if (this.slideBumpFrames > 0) {
 				this.setXVelocity(this.slideBumpFacing.x * -1);
 			} else {
@@ -4014,7 +4179,7 @@ class Player extends Actor {
 				this.sprite.setRow(2);
 			}
 
-			const zPressed = this.getGame().unlocks.JUMP && keys["KeyZ"] && !this.prevZKey;
+			const zPressed = this.getGame().unlocks.JUMP && keys["KeyZ"] && !keys["PrevKeyZ"];
 			const xPressed = keys["KeyQ"] && !this.prevXKey;
 			//If z is pressed, jjp = 8, otherwise decr jjp if jjp > 0
 			if (zPressed) {
@@ -4095,7 +4260,6 @@ class Player extends Actor {
 			}
 			// if (this.slideTimer > 1) {
 			// 	if (!this.getLevel().isLeftOfWall(this) && !this.getLevel().isRightOfWall(this)) {
-			// 		console.log("?");
 			// 		// this.slideTimer = 0;
 			// 		this.slideBump(this.facing);
 			// 		this.sliding = false;
@@ -4112,11 +4276,10 @@ class Player extends Actor {
 			}
 
 			this.prevXKey = keys["KeyQ"];
-			this.prevZKey = keys["KeyZ"];
 		}
 		this.wasOnGround = onGround;
 
-		if (this.sliding && this.isOnGround() && game.animFrame % 6 == 1) {
+		if (this.sliding &&  game.animFrame % 3 == 1 && this.deathFrames <= 0) {
 			game.spawnSlideDust(this.getX(), this.getY()+6, this.facing.x);
 		}
 	}
@@ -4146,6 +4309,7 @@ class Player extends Actor {
 			}
 
 			this.getGame().lastSliding = this.sliding;
+			this.getGame().lastCanDoubleJump = this.canDoubleJump;
 			this.getGame().lastYVelocity = this.getYVelocity();
 		}
 	}
@@ -4159,6 +4323,8 @@ class Player extends Actor {
 		this.slideBumpFrames = 8;
 		this.setYVelocity(-2);
 		this.sliding = false;
+
+		this.getLevel().pushDustSprite(new GroundDustSprite(this.getX(), this.getY() - 3, 0, this.level, this.facing.scalar(-1)))
 	}
 }
 
@@ -4239,6 +4405,72 @@ class Button extends Solid {
 	}
 }
 
+class DiamondPowerup extends Button {
+	constructor(x, y, level, onPush, sprite) {
+		super(x, y, 14, 14, level, onPush);
+		this.setSprite(new AnimatedSprite(sprite, null, [{frames: 0}, {frames: 4, onComplete: "loop", nth: 15}], 12, 13));
+		this.getSprite().setRow(1);
+
+		this.isDiamond = true;
+	}
+
+	draw() {
+		if (this.pushed) this.drawLines();
+		if (this.getLevel().endGameFrames > 0) {
+			const pos = game.getPlayer().getPos();
+			pos.incrPoint(Vector({x:-3,y: -13}));
+			this.setX(pos.x);
+			this.setY(pos.y);
+		}
+		this.getSprite().draw(this.getX(), this.getY());
+	}
+
+	drawLines() {
+		const yOff = 5;
+		const xOff = 5;
+
+		const numLines = 16;
+		const radOff = 0.5 * Math.sin(game.animFrame / 30 * Math.PI);
+		for (let i = 0; i < numLines; ++i) {
+			let angle = 2 * Math.PI * (i + game.animFrame / 30) / numLines;
+			CTX.fillStyle = "#7e2553a0";
+			this.drawLineAround(this.getX() + xOff, this.getY() + yOff, angle, 20, 28 + radOff);
+			if (i % 2 === 0) {
+				CTX.fillStyle = "#ff004de0";
+				this.drawLineAround(this.getX() + xOff, this.getY() + yOff, -angle, 8, 16);
+			}
+		}
+		drawEllipse(this.getX() + xOff, this.getY() + yOff, 36 + radOff * 2, "rgba(126, 27, 83, 0.2)", "rgba(126, 27, 83, 0)");
+		drawEllipse(this.getX() + xOff, this.getY() + yOff, 24 + radOff * 2, "rgba(126, 27, 83, 0.3)", "rgba(126, 27, 83, 0)");
+	}
+
+	drawLineAround(x, y, angle, rad1, rad2) {
+		let xCos = Math.cos(angle);
+		let ySin = Math.sin(angle);
+		let x0 = Math.round(x + xCos * rad1);
+		let y0 = Math.round(y + ySin * rad1);
+		let x1 = Math.round(x + xCos * rad2);
+		let y1 = Math.round(y + ySin * rad2);
+		drawLine(x0, y0, x1, y1);
+	}
+}
+
+class Powerup extends Button {
+	constructor(x, y, level, onPush, sprite) {
+		super(x, y, 14, 14, level, onPush);
+		this.setSprite(new AnimatedSprite(sprite, null, [{frames: 0}, {frames: 4, onComplete: "loop", nth: 15}], 12, 13));
+		this.getSprite().setRow(1);
+	}
+
+	draw() {
+		if (this.pushed) return;
+		this.getSprite().draw(this.getX(), this.getY());
+		// drawOnCanvas(new Rectangle(this.getX(), this.getY(), this.getWidth(), this.getHeight()), "#ffa0a0");
+	}
+
+	
+}
+
 class BigButton extends Button {
 	curHeightFall = 0;
 	hitboxHeights = [12, 10, 8, 6];
@@ -4306,6 +4538,7 @@ let keys = {
 	"ArrowDown": 0,
 	"ArrowUp": 0,
 	"KeyZ": 0,
+	"PrevKeyZ": 0,
 	"KeyX": 0,
 	"KeyQ": 0,
 
