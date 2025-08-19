@@ -2584,7 +2584,7 @@ class Level {
 		this.endLevelFrames = 0;
 		this.actors = newActors;
 
-		if (this.myLevelInd === 11 && this.getGame().unlocks.SLIDE) this.hintText = false;
+		if (this.myLevelInd === 11 && this.getGame().visitedLevels[5]) this.hintText = false;
 		if (this.myLevelInd === 12 && this.getGame().unlocks.JUMP) this.hintText = false;
 		if (this.myLevelInd === 10 && this.getGame().unlocks.SLIDE) this.hintText = false;
 		if (this.myLevelInd === 14 && this.getGame().unlocks.DJ) this.hintText = false;
