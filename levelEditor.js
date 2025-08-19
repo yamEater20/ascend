@@ -20,6 +20,9 @@ const CODES = {
     "#3B3FDA": "62",
     "#83EBFF": "63",
     "#C1F5FF": "60",
+    "#C1FFC8": "68",
+    "#9FFFA9": "69",
+    "#C9FFC4": "70",
 }
 
 const LEVEL_PATH = "Levels.png";

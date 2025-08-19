@@ -43,6 +43,19 @@ const DIAMOND_IMG = document.getElementById("diamond-img");
 const THROWABLE_SPRITESHEET = document.getElementById("throwable-spritesheet");
 const FLAME_SPRITESHEET = document.getElementById("flame-spritesheet");
 const GOD_RAY_IMG = document.getElementById("god-ray-img");
+const VINE_IMGS = [
+	document.getElementById("vines1-img"),
+	document.getElementById("vines2-img"),
+	document.getElementById("vines3-img"),
+	document.getElementById("vines4-img")
+];
+const PLANT_IMGS = [
+	document.getElementById("plants1-img"),
+	document.getElementById("plants2-img"),
+	document.getElementById("plants3-img"),
+	document.getElementById("plants4-img")
+];
+const PEDESTAL_IMG = document.getElementById("pedestal-img");
 const TORCH_IMG = document.getElementById("torch-img");
 const BROWN_DUST_SPRITESHEET = document.getElementById("brown-dust-spritesheet");
 const GROUND_DUST_SPRITESHEET = document.getElementById("ground-dust-spritesheet");
@@ -895,6 +908,8 @@ class Sprite {
 			this.drawSelf(x + game.cameraOffset.x, y + game.cameraOffset.y);
 		}
 	}
+
+	update() {}
 }
 
 function hexToRgb(hex) {
@@ -1362,6 +1377,7 @@ class Game {
 		this.scoreboardRect = new Rectangle(4, 4, 44, 19);
 		this.scoreboardFrames = 0;
 		this.secondsUntilBat = Math.round(Math.random() * 10 + 5);
+		this.framesUntilDrop = 60;
 		this.cheated = false;
 		this.emptySquareData = {x: -1, y: -1, rad: -1, color: null};
 
@@ -1396,9 +1412,14 @@ class Game {
 		if (this.animFrame % 60 === 0) {
 			this.secondsUntilBat -= 1;
 		}
+		this.framesUntilDrop--;
 		if (this.secondsUntilBat < 0) {
 			this.getCurrentLevel().spawnBat();
 			this.secondsUntilBat = Math.round(Math.random() * 10 + 5);
+		}
+		if (this.framesUntilDrop < 0) {
+			this.getCurrentLevel().spawnDrop();
+			this.framesUntilDrop = Math.round(Math.random() * 45 + 15);
 		}
 		if (this.emptySquareData.x !== -1) {
 			this.drawEmptySquareAround(
@@ -1987,12 +2008,7 @@ class MapSec {
 			if (tileCode === 1) this.pixels.push("#5F574F");
 			// else if (52 <= tileCode && 55 >= tileCode) this.pixels.push("#FF004D");
 			else if (tileCode === 73) this.pixels.push("#AB5236");
-			else if (tileCode === 68) {
-				[t - 16, t - 15, t - 14, t - 13, t, t + 1, t + 2, t + 3].forEach(bt => {
-					this.pixels[bt] = "#FFEC27"
-				})
-				t += 4;
-			} else this.pixels.push("#000000");
+			else this.pixels.push("#000000");
 		}
 	}
 
@@ -2036,6 +2052,7 @@ class Level {
 		this.solids = [];
 		this.actors = [];
 		this.decorations = [];
+		this.frontDecorations = [];
 		this.dustSprites = [];
 		this.myLevelInd = levelInd;
 		let curTileMapInd = 0;
@@ -2109,7 +2126,7 @@ class Level {
 						let centerTile = false;
 						switch (tileCode) {
 							case 60:
-								this.decorations.push(new GodRay(gameSpaceX-16, gameSpaceY-16, this));
+								this.frontDecorations.push(new GodRay(gameSpaceX-16, gameSpaceY-16, this));
 								break;
 							case 61:
 								centerTile = true;
@@ -2117,7 +2134,7 @@ class Level {
 								this.decorations.push(new Torch(gameSpaceX, gameSpaceY, this, centerTile));
 								break;
 							case 63:
-								this.decorations.push(new GodRay(gameSpaceX, gameSpaceY, this));
+								this.frontDecorations.push(new GodRay(gameSpaceX, gameSpaceY, this));
 								break;
 						}
 						break;
@@ -2125,16 +2142,20 @@ class Level {
 						this.spawn = new Spawn(gameSpaceX + 1, gameSpaceY + 2);
 						break;
 					case 17:
-						this.solids.push(new BigButton(
-							gameSpaceX,
-							gameSpaceY - 4,
-							8 * 4, 12,
-							this,
-							(h) => {
-								this.getGame().onBigButtonPush(h)
-							}
-						));
-						break;
+						switch (tileCode) {
+							case 68:
+								this.frontDecorations.push(new Vine(gameSpaceX, gameSpaceY, this));
+								break;
+							case 69:
+								this.frontDecorations.push(new Plant(gameSpaceX, gameSpaceY, this));
+								break;
+							case 70:
+								this.solids.push(new Pedestal(gameSpaceX, gameSpaceY, this));
+								break;
+							case 71:
+								this.frontDecorations.push(new Vine(gameSpaceX, gameSpaceY, this));
+								break;
+						}
 					case 18:
 						switch (tileCode) {
 							case 72:
@@ -2195,7 +2216,7 @@ class Level {
 								break;
 							case 85:
 								x += 4;
-								onPush = () => onPickup("SLIDE", "#ffa300", LOOP2_MUSIC, "Press x to slide through spikes", Vector({x: 3, y:12}));
+								onPush = () => onPickup("SLIDE", "#ffa300", LOOP2_MUSIC, "Press x to slide through spikes", Vector({x: 3, y:32}));
 								sprite = POWERUP_SLIDE_SPRITE;
 								break;
 							case 86:
@@ -2283,6 +2304,9 @@ class Level {
 		});
 		if (this.throwable) this.throwable.draw();
 		this.player.draw();
+		this.frontDecorations.forEach(curItem => {
+			curItem.draw();
+		});
 		this.dustSprites.forEach(i => i.draw());
 		if (this.hintText) {
 			const t = this.hintText.text;
@@ -2305,6 +2329,31 @@ class Level {
 		const x = -5;
 		const direction = 1;
 		this.pushDecoration(new Bat(x, y, direction, this));
+	}
+
+	spawnDrop() {
+		const x = Math.random() * (PIXEL_GAME_SIZE[0] - 8) + 4;
+		const y = -5;
+
+		const r0 = Math.random() / 10;
+		const r1 = Math.random() * 50;
+		const r2 = Math.random() / 10;
+		// const actor = new Actor(x, y, 1, 1, true, this);
+		// let destroy = false;
+		// function p(t) {
+		// 	const px = t * r0;
+		// 	const py = clampedQuadratic(t, (200+r1), -(0.6 + r2), 0.5+r2);
+		// 	if (d(actor)) destroy = true;
+		// 	console.log(destroy);
+		// 	if (destroy) return {x: -100, y: -100};
+		// 	actor.setX(Math.floor(x + px));
+		// 	actor.setY(Math.floor(y + py));
+		// 	return {x: x + px, y: y + py};
+		// }
+		// const dust = new Particle(this, "#ffffff", p, Vector({x:2,y:2}));
+		// this.pushDustSprite(dust);
+		const drop = new Drop(x, y, this);
+		this.actors.push(drop);
 	}
 
 	endGame() {
@@ -2413,10 +2462,6 @@ class Level {
 
 	getAllGeometry() {
 		return this.solids.concat(this.actors);
-	}
-
-	getAllItems() {
-		return this.getAllGeometry().concat(this.decorations);
 	}
 
 	isOnGround(actor) {
@@ -2544,6 +2589,11 @@ class Level {
 		if (this.myLevelInd === 10 && this.getGame().unlocks.SLIDE) this.hintText = false;
 		if (this.myLevelInd === 14 && this.getGame().unlocks.DJ) this.hintText = false;
 		if (this.myLevelInd === 15 && this.getGame().visitedLevels[5]) this.hintText = false;
+
+		if (this.myLevelInd === 12) {
+			const isStuck = this.player.getX() < 104 && this.player.getY() >= 106;
+			if (isStuck) this.hintText = {text: "Press r to restart", pos: Vector({x: 24, y:32})};
+		}
 	}
 
 	killPlayer(x, y) {
@@ -2807,6 +2857,11 @@ class EndScreen extends Level {
 		this.getSolids().forEach(e => {
 			e.draw();
 		});
+		this.getActors().forEach(e => e.draw());
+		this.dustSprites.forEach(i => i.draw());
+		this.frontDecorations.forEach(curItem => {
+			curItem.draw();
+		});
 		if (this.endGameFrames > 1) {
 			this.fade(1 - (this.endGameFrames / (ENDGAME_ANIM_FRAMES - ENDGAME_OFFSET_FRAMES)));
 			this.endGameFrames -= 1;
@@ -2831,7 +2886,7 @@ class EndScreen extends Level {
 		this.player.draw();
 		if (this.throwable) this.throwable.draw();
 
-		CTX.drawImage(TITLE_IMG, 10 + game.cameraOffset.x, 190 + game.cameraOffset.y);
+		CTX.drawImage(TITLE_IMG, 10 + game.cameraOffset.x, 184 + game.cameraOffset.y);
 		let textPos = Vector({x: 16, y: 144});
 		CREDITS.map(credit => {
 			textPos.y += credit["paddingY"] ? credit["paddingY"] : 0;
@@ -3045,8 +3100,8 @@ class Decoration {
 		this.level = level;
 	}
 
-	draw(x, y) {
-		this.sprite.draw(x, y);
+	draw() {
+		this.sprite.draw(this.x, this.y);
 	}
 
 	update() {
@@ -3073,10 +3128,6 @@ class Bat extends Decoration {
 			delete this;
 		}
 	}
-
-	draw() {
-		super.draw(this.x, this.y);
-	}
 }
 
 class BrownDust extends Decoration {
@@ -3085,10 +3136,6 @@ class BrownDust extends Decoration {
 		this.sprite.setRow(1);
 		this.vy = startingYv;
 		this.xFunc = xFunc;
-	}
-
-	draw() {
-		super.draw(this.x, this.y);
 	}
 
 	update() {
@@ -3156,21 +3203,36 @@ function drawRoundedRect(x, y, w, h, rad, colorA, colorB) {
 	CTX.fill();
 }
 
+class Vine extends Decoration {
+	constructor(x, y, level) {
+		const ind = Math.floor(Math.random() * 4);
+		super(x, y, new Sprite(VINE_IMGS[ind]), level);
+	}
+}
+
+class Plant extends Decoration {
+	constructor(x, y, level) {
+		const ind = Math.floor(Math.random() * 4);
+		super(x, y, new Sprite(PLANT_IMGS[ind]), level);
+	}
+}
+
 class GodRay extends Decoration {
 	constructor(x, y, level) {
-		super(x, y, new AnimatedSprite(
-			GOD_RAY_IMG,
-			null,
-			[{frames: 0}, {frames: 1, onComplete: "loop", nth: 60}], 80, 80
-		), level);
+		// const spr = new AnimatedSprite(
+		// 	GOD_RAY_IMG,
+		// 	null,
+		// 	[{frames: 0}, {frames: 1, onComplete: "loop", nth: 60}], 80, 80
+		// )
+		const spr = new Sprite(GOD_RAY_IMG);
+		super(x, y, spr, level);
 
 		// this.sprite.setRow(1);
-		this.spr = new Sprite(GOD_RAY_IMG);
 	}
 
 	draw() {
 		// super.draw(this.x, this.y);
-		this.spr.draw(this.x - 16, this.y - 16);
+		super.draw(this.x - 16, this.y - 16);
 	}
 }
 
@@ -3195,7 +3257,7 @@ class Torch extends Decoration {
 		// CTX.ellipse(+game.cameraOffset.x+4+this.offset, this.y+game.cameraOffset.y+8, rad, rad, 0, 0, Math.PI*2, true);
 		// drawEllipse(this.x+4+this.offset, this.y+10+yOffset, 10+offset, "rgba(250,198,42,0.1)");
 		drawEllipse(this.x + 4 + this.offset, this.y + 10 + yOffset, 18 + offset, "rgba(41,173,255,0.3)", "rgba(41,173,255,0.0)");
-		super.draw(this.x + this.offset, this.y + 2 + yOffset);
+		this.sprite.draw(this.x + this.offset, this.y + 2 + yOffset);
 	}
 }
 
@@ -3228,7 +3290,7 @@ class GroundDustSprite extends Decoration {
 	}
 
 	draw() {
-		super.draw(this.x + this.direction * this.sprite.curCol, this.y);
+		this.sprite.draw(this.x + this.direction * this.sprite.curCol, this.y);
 	}
 
 	update() {
@@ -3475,6 +3537,13 @@ class Ice extends Solid {
 	// }
 }
 
+class Pedestal extends Solid {
+	constructor(x, y, level) {
+		super(x, y, 16, 8, true, level);
+		super.setSprite(new Sprite(PEDESTAL_IMG));
+	}
+}
+
 function rotateRect(x, y, w, h, direction) {
 	const xgrid = x - x % TILE_SIZE, ygrid = y - y % TILE_SIZE;
 
@@ -3492,6 +3561,44 @@ function rotateRect(x, y, w, h, direction) {
 		newW: direction.x === 0 ? w : h,
 		newH: direction.x === 0 ? h : w
 	};
+}
+
+class Drop extends Actor {
+	constructor(x, y, level) {
+		super(Math.round(x), y, 1, 3, false, level);
+		this.velocity.y = 0;
+		this.gravity = 0.1;
+		this.destroyed = false;
+		this.onCollide = this.onCollide.bind(this);
+		this.id = window.performance.now();
+	}
+
+	respawnClone(level) {
+		return new Drop(this.getX(), this.getY(), level);
+	}
+
+	draw() {
+		drawOnCanvas(this.hitbox.rect, "#29adff80");
+	}
+
+	updatePhysicsPos() {
+		if (this.destroyed) return;
+		this.velocity.y += this.gravity;
+		super.updatePhysicsPos();
+	}
+
+	onCollide(physObj) {
+		if (physObj.onPlayerCollide().includes("wall")) {
+			this.destroyed = true;
+			const index = this.getLevel().actors.findIndex(a => a.id === this.id);
+			if (index > -1) {
+				this.getLevel().actors.splice(index, 1);
+			}
+		}
+		return false;
+	}
+
+	onPlayerCollide() {return "drop";}
 }
 
 class Spring extends Actor {
@@ -4372,6 +4479,8 @@ class Player extends Actor {
 		this.slideBumpFrames = 8;
 		this.setYVelocity(-2);
 		this.sliding = false;
+		this.facing = facing.scalar(-1);
+		this.getSprite().flip = facing.x < 0;
 
 		this.getLevel().pushDustSprite(new GroundDustSprite(this.getX(), this.getY() - 3, 0, this.level, this.facing.scalar(-1)))
 	}
@@ -4472,6 +4581,8 @@ class DiamondPowerup extends Button {
 			this.setY(pos.y);
 		}
 		this.getSprite().draw(this.getX(), this.getY());
+		const radOff = 0.5 * Math.sin(game.animFrame / 30 * Math.PI);
+		drawEllipse(this.getX()+6, this.getY()+5 + Math.floor(this.getSprite().curCol / 2), 12+radOff/2, "rgba(255,0,77,0.3)", "rgba(255,0,77,0)");
 	}
 
 	drawLines() {
