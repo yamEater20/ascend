@@ -42,6 +42,7 @@ const SKULL_IMG = document.getElementById("skull-img");
 const DIAMOND_IMG = document.getElementById("diamond-img");
 const THROWABLE_SPRITESHEET = document.getElementById("throwable-spritesheet");
 const FLAME_SPRITESHEET = document.getElementById("flame-spritesheet");
+const GOD_RAY_IMG = document.getElementById("god-ray-img");
 const TORCH_IMG = document.getElementById("torch-img");
 const BROWN_DUST_SPRITESHEET = document.getElementById("brown-dust-spritesheet");
 const GROUND_DUST_SPRITESHEET = document.getElementById("ground-dust-spritesheet");
@@ -345,11 +346,11 @@ const PIXEL_LETTERS = {
 		[, ,]
 	],
 	':': [
-		[, ,],
-		[1, ,],
-		[, ,],
-		[1, ,],
-		[, ,]
+		[],
+		[1],
+		[],
+		[1],
+		[]
 	],
 	'.': [
 		[, ,],
@@ -1363,7 +1364,6 @@ class Game {
 		this.secondsUntilBat = Math.round(Math.random() * 10 + 5);
 		this.cheated = false;
 		this.emptySquareData = {x: -1, y: -1, rad: -1, color: null};
-		this.getCurrentLevel().resetStage();
 
 		this.fellFromHeight = 0;
 
@@ -1375,6 +1375,8 @@ class Game {
 			SLIDE: false,
 			DJ: false,
 		}
+
+		this.getCurrentLevel().resetStage();
 
 		audioCon.playAmbiance(CAVE_AMBIANCE);
 	}
@@ -1567,7 +1569,7 @@ class Game {
 	}
 
 	setLevel(ind, direction, playerPos) {
-		this.getCurrentLevel().decorations = [];
+		this.getCurrentLevel().dustSprites = [];
 
 		this.levelInd = ind;
 		this.visitedLevels[ind] = true;
@@ -1584,7 +1586,7 @@ class Game {
 
 		this.respawn();
 		if (this.onLastLevel()) {
-			this.scoreboardRect.pos = Vector({x: 46, y: 94});
+			this.scoreboardRect.pos = Vector({x: 46, y: 128 + 128 + 36});
 			this.scoreboardRect.height = 20;
 			const t = window.performance.now();
 			this.nanosecondsSinceStart = () => {
@@ -1656,7 +1658,7 @@ class Game {
 				return {x: spawnX + px, y: spawnY + py};
 			}
 			const dust = new Particle(curLevel, "#ffa300", p, Vector({x:1,y:1}));
-			curLevel.pushDecoration(dust);
+			curLevel.pushDustSprite(dust);
 		}
 	}
 
@@ -1676,7 +1678,7 @@ class Game {
 			return {x: spawnX + px, y: y + py};
 		}
 		const dust = new Particle(curLevel, "#ffa300", p, Vector({x:size,y:size}));
-		curLevel.pushDecoration(dust);
+		curLevel.pushDustSprite(dust);
 	}
 
 	spawnDoubleJumpParticles(x, y) {
@@ -1694,10 +1696,29 @@ class Game {
 				return {x: spawnX + px, y: y + py};
 			}
 			const dust = new Particle(curLevel, "#188755", p, Vector({x:1,y:1}));
-			curLevel.pushDecoration(dust);
+			curLevel.pushDustSprite(dust);
 		}
 	}
 
+	spawnSpringParticles(x, y) {
+		for (let i = 0; i < 5; ++i) {
+			const spawnX = x + Math.random() * 2;
+			const curLevel = this.getCurrentLevel();
+
+			const r0 = Math.random() * 10;
+			const r1 = Math.random() * 10;
+			const r2 = Math.random() / 10;
+			
+			function p(t) {
+				const px = clampedQuadratic(t, (30+r0) * (i - 3), 0.7, 0.33);
+				const py = clampedQuadratic(t, (50+r1), (0.6 + r2), (0.6 + r2) / 2 + r2);
+				return {x: spawnX + px, y: y + py};
+			}
+			const dust = new Particle(curLevel, "#ff004d", p, Vector({x:1,y:1}));
+			curLevel.pushDustSprite(dust);
+		}
+	}
+	
 	spawnPowerupParticles(x, y, color) {
 		for (let i = 0; i < 12; ++i) {
 			const spawnX = x + Math.random() * 2;
@@ -1712,7 +1733,7 @@ class Game {
 				return {x: spawnX + px, y: y + py};
 			}
 			const dust = new Particle(curLevel, color, p, Vector({x:2,y:2}));
-			curLevel.pushDecoration(dust);
+			curLevel.pushDustSprite(dust);
 		}
 	}
 
@@ -1931,7 +1952,7 @@ class WorldMap {
 	draw() {
 		const margin = 1;
 
-		const offset = Vector({x: 5, y: 14});
+		const offset = Vector({x: 5, y: game.onLastLevel() ? 128 + 72 : 14});
 		const roomsW = 5;
 		const roomsH = 4;
 
@@ -2088,7 +2109,7 @@ class Level {
 						let centerTile = false;
 						switch (tileCode) {
 							case 60:
-								this.decorations.push(new ExitArrow(gameSpaceX, gameSpaceY, this, x === 0));
+								this.decorations.push(new GodRay(gameSpaceX-16, gameSpaceY-16, this));
 								break;
 							case 61:
 								centerTile = true;
@@ -2096,8 +2117,7 @@ class Level {
 								this.decorations.push(new Torch(gameSpaceX, gameSpaceY, this, centerTile));
 								break;
 							case 63:
-								this.throwable = new DiamondThrowable(gameSpaceX + 1, gameSpaceY + 2, TILE_SIZE - 2, TILE_SIZE - 2, this)
-								this.actors.push(this.throwable);
+								this.decorations.push(new GodRay(gameSpaceX, gameSpaceY, this));
 								break;
 						}
 						break;
@@ -2169,13 +2189,13 @@ class Level {
 							case 84:
 								onPush = () => {
 									audioCon.playSong(HEADER_MUSIC);
-									onPickup("JUMP", "#ff004d", LOOP1_MUSIC, "Press z to jump", Vector({x: 34, y:32}));
+									onPickup("JUMP", "#ff004d", LOOP1_MUSIC, "Press z to jump", Vector({x: 34, y:116}));
 								}
 								sprite = POWERUP_JUMP_SPRITE;
 								break;
 							case 85:
 								x += 4;
-								onPush = () => onPickup("SLIDE", "#ffa300", LOOP2_MUSIC, "Press x to slide through spikes", Vector({x: 3, y:8}));
+								onPush = () => onPickup("SLIDE", "#ffa300", LOOP2_MUSIC, "Press x to slide through spikes", Vector({x: 3, y:12}));
 								sprite = POWERUP_SLIDE_SPRITE;
 								break;
 							case 86:
@@ -2221,7 +2241,7 @@ class Level {
 		this.endLevelFrames = 0;
 		this.opacity = 0;
 
-		if (this.myLevelInd === 19) this.hintText = {text: "Hold c for map", pos: Vector({x: 8, y:12})}
+		if (this.myLevelInd === 11) this.hintText = {text: "Hold c for map", pos: Vector({x: 54, y:16})}
 		if (this.myLevelInd === 12) this.hintText = {text: "Arrow keys to move", pos: Vector({x: 24, y:32})}
 	}
 
@@ -2264,7 +2284,6 @@ class Level {
 		if (this.throwable) this.throwable.draw();
 		this.player.draw();
 		this.dustSprites.forEach(i => i.draw());
-		
 		if (this.hintText) {
 			const t = this.hintText.text;
 			const p = this.hintText.pos;
@@ -2372,7 +2391,6 @@ class Level {
 		if (nextLevelDir && this.endLevelFrames === 0) {
 			this.nextDirection = this.nextLevelDir();
 			this.nextLevelPlayerPos = this.getPlayer().getPos();
-			if (this.myLevelInd === 12) this.hintText = false;
 			this.game.nextLevel(this.nextDirection, this.nextLevelPlayerPos);
 		}
 		if (this.endLevelFrames === 1) {
@@ -2508,6 +2526,7 @@ class Level {
 			this.player.respawnFrames = 0;
 			this.player.sliding = this.game.lastSliding;
 			this.player.canDoubleJump = this.game.lastCanDoubleJump;
+			this.player.coyoteTime = this.game.lastCoyoteTime;
 		} else {
 			this.currentSpawn = Vector({x: this.spawn.x, y: this.spawn.y});
 		}
@@ -2515,9 +2534,16 @@ class Level {
 		this.player.setY(this.currentSpawn.y);
 		this.player.spawn = this.currentSpawn;
 		this.player.facing = this.game.lastFacing;
+		this.player.getSprite().flip = this.player.facing.x > 0;
 
 		this.endLevelFrames = 0;
 		this.actors = newActors;
+
+		if (this.myLevelInd === 11 && this.getGame().unlocks.SLIDE) this.hintText = false;
+		if (this.myLevelInd === 12 && this.getGame().unlocks.JUMP) this.hintText = false;
+		if (this.myLevelInd === 10 && this.getGame().unlocks.SLIDE) this.hintText = false;
+		if (this.myLevelInd === 14 && this.getGame().unlocks.DJ) this.hintText = false;
+		if (this.myLevelInd === 15 && this.getGame().visitedLevels[5]) this.hintText = false;
 	}
 
 	killPlayer(x, y) {
@@ -2688,7 +2714,7 @@ const ENDGAME_WALK_OFFSET_FRAMES = 30;
 const CREDITS = [{
 	"text": "Credits:",
 	"size": 2,
-	"paddingY": 24,
+	"paddingY": 128 + 64,
 }, {
 	"text": "A Game By:",
 	"size": 1,
@@ -2716,7 +2742,7 @@ const CREDITS = [{
 	"size": 1,
 	"paddingY": 8,
 }, {
-	"text": "By Lance Conrad",
+	"text": "  By Lance Conrad",
 	"size": 1,
 	"paddingY": 8,
 }, {
@@ -2805,7 +2831,7 @@ class EndScreen extends Level {
 		this.player.draw();
 		if (this.throwable) this.throwable.draw();
 
-		CTX.drawImage(TITLE_IMG, 10 + game.cameraOffset.x, 134 + game.cameraOffset.y);
+		CTX.drawImage(TITLE_IMG, 10 + game.cameraOffset.x, 190 + game.cameraOffset.y);
 		let textPos = Vector({x: 16, y: 144});
 		CREDITS.map(credit => {
 			textPos.y += credit["paddingY"] ? credit["paddingY"] : 0;
@@ -2846,6 +2872,7 @@ class EndScreen extends Level {
 				window.location.reload();
 			}
 		}
+		game.showMap = true;
 		
 		if (this.endGameFrames === 0) {
 			super.setKeys(keys);
@@ -3129,6 +3156,24 @@ function drawRoundedRect(x, y, w, h, rad, colorA, colorB) {
 	CTX.fill();
 }
 
+class GodRay extends Decoration {
+	constructor(x, y, level) {
+		super(x, y, new AnimatedSprite(
+			GOD_RAY_IMG,
+			null,
+			[{frames: 0}, {frames: 1, onComplete: "loop", nth: 60}], 80, 80
+		), level);
+
+		// this.sprite.setRow(1);
+		this.spr = new Sprite(GOD_RAY_IMG);
+	}
+
+	draw() {
+		// super.draw(this.x, this.y);
+		this.spr.draw(this.x - 16, this.y - 16);
+	}
+}
+
 class Torch extends Decoration {
 	constructor(x, y, level, centerTile) {
 		super(x, y, new AnimatedSprite(
@@ -3251,6 +3296,7 @@ class Actor extends PhysObj {
 		this.spawn = Vector({x: x, y: y});
 		this.origW = w;
 		this.origH = h;
+		this.subpixelX = 0;
 	}
 
 	respawnClone() {
@@ -3259,7 +3305,8 @@ class Actor extends PhysObj {
 
 	//Moves the actor by [amount] pixels and calls [onCollide] after collision with any object
 	moveX(amount, onCollide) {
-		let remainder = Math.round(amount);
+		let remainder = Math.round(amount + this.subpixelX);
+		this.subpixelX = (amount + this.subpixelX) - remainder;
 		const direction = Vector({x: amount < 0 ? -1 : 1, y: 0});
 		if (remainder !== 0) {
 			const carryingObj = this.getCarrying();
@@ -3483,6 +3530,7 @@ class Spring extends Actor {
 		}
 		super.getSprite().setRow(1);
 		audioCon.playSoundEffect(SPRING_SFX);
+		game.spawnSpringParticles(this.getX(), this.getY());
 		// const numDusts = 3;
 		// for(let i = 0; i<numDusts; ++i) {
 		//     const vx = Math.sign(Math.random()-0.5);
@@ -3502,7 +3550,6 @@ class Spring extends Actor {
 /*class GhostSpring extends Spring {
     constructor(x, y, w, h, direction, level) {
         super(x, y, w, h, direction, level);
-        console.log(x + " " + y);
         this.setX(x);
         this.setY(y);
         this.width = w;
@@ -4159,7 +4206,7 @@ class Player extends Actor {
 				this.getLevel().killPlayer();
 			}
 			if (this.sliding) {
-				this.setXVelocity(this.facing.x * 2);
+				this.setXVelocity(this.facing.x * 1.8);
 				if (onGround && this.sprite.getRow() === 0) this.sprite.setRow(1);
 			} else if (this.slideBumpFrames > 0) {
 				this.setXVelocity(this.slideBumpFacing.x * -1);
@@ -4282,6 +4329,8 @@ class Player extends Actor {
 		if (this.sliding &&  game.animFrame % 3 == 1 && this.deathFrames <= 0) {
 			game.spawnSlideDust(this.getX(), this.getY()+6, this.facing.x);
 		}
+
+		this.getGame().lastCoyoteTime = this.coyoteTime;
 	}
 
 	updatePhysicsPos() {
