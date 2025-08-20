@@ -624,7 +624,7 @@ class AudioController {
 	constructor() {
 		this.curSong = null;
 		this.curSongId = -1;
-		this.musicVolume = 1;
+		this.musicVolume = 0.5;
 		this.sfxVolume = 1;
 
 		this.nowPlaying = "";
@@ -1532,6 +1532,16 @@ class Game {
 				this.getCurrentLevel().onButtonPush();
 			}
 
+			if (keys["KeyC"]) {
+				this.scoreboardFrames += 1;
+				this.showMap = true;
+
+				if (!this.prevC) audioCon.playSoundEffect(PING_SFX);
+			} else {
+				this.showMap = false;
+				if (this.prevC) audioCon.playSoundEffect(PONG_SFX);
+			}
+
 			keys["PrevKeyZ"] = this.prevZ;
 
 			this.prevO = keys["KeyO"];
@@ -1541,13 +1551,8 @@ class Game {
 			this.prevI = keys["KeyI"];
 			this.prevS = keys["KeyP"];
 			this.prevZ = keys["KeyZ"];
+			this.prevC = keys["KeyC"];
 
-			if (keys["KeyC"]) {
-				this.scoreboardFrames += 1;
-				this.showMap = true;
-			} else {
-				this.showMap = false;
-			}
 			this.getCurrentLevel().setKeys(keys);
 		} else {
 			optionsCon.setKeys(keys)
@@ -2817,6 +2822,14 @@ const CREDITS = [{
 	"paddingY": 24,
 }, {
 	"text": "Cathy Lin",
+	"size": 1,
+	"paddingY": 8,
+}, {
+	"text": "Eric",
+	"size": 1,
+	"paddingY": 8,
+}, {
+	"text": "Esther Moon",
 	"size": 1,
 	"paddingY": 8,
 }, {
