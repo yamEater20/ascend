@@ -657,11 +657,11 @@ class AudioController {
 	}
 
 	fadeOutSong(ms) {
-		//this.curSong.on('end', this.stopSong, this.curSongId);
-		//this.curSong.fade(1, 0, ms, this.curSongId);
+		if (this.curSong) {
+			this.curSong.fade(1,0,ms,this.curSongId);
+			this.curSong.off('end');
+		}
 		this.ambiance.fade(1, 0, ms);
-		this.curSong.fade(1,0,ms,this.curSongId);
-		this.curSong.off('end');
 	}
 
 	stopSong() {
@@ -1083,7 +1083,7 @@ class Option {
 	}
 
 	setKeys(k) {
-		const kZ = k["KeyZ"];
+		const kZ = k["jump"];
 		if (!this.prevZ && kZ) this.zPressed();
 		this.prevZ = kZ;
 	}
@@ -1105,8 +1105,8 @@ class SliderOption extends Option {
 	}
 
 	setKeys(k) {
-		const kLeft = k["ArrowLeft"];
-		const kRight = k["ArrowRight"];
+		const kLeft = k["moveLeft"];
+		const kRight = k["moveRight"];
 		let valChange = false;
 		if (!this.prevLeft && kLeft) {
 			this.val = Math.max(this.val - 1, 0);
@@ -1199,7 +1199,7 @@ class BrokenTextField {
 			}
 		});
 		const kBack = k["Backspace"];
-		// const kRight = k["ArrowRight"];
+		// const kRight = k["moveRight"];
 		if (!this.prevBack && kBack) {
 			this.curInd = Math.max(0, this.curInd - 1);
 			this.txt[this.curInd] = "";
@@ -1341,7 +1341,7 @@ class Game {
 		this.levels = [];
 		this.visitedLevels = {};
 		this.bigUnlocked = false;
-		this.startTime = window.performance.now();
+		this.startTime = -1;
 		this.lastFacing = VectorRight;
 		this.lastSliding = false;
 		this.canDoubleJump = false;
@@ -1435,31 +1435,7 @@ class Game {
 	}
 
 	onBigButtonPush(curHeight) {
-		// audioCon.playSoundEffect(BUTTON_SFX);
-
-		// switch (curHeight) {
-		// 	case 3:
-		// 		this.unlocks.DJ = true;
-		// 	case 2:
-		// 		this.unlocks.SLIDE = true;
-		// 	case 1:
-		// 		this.unlocks.JUMP = true;
-		// 		audioCon.playSoundEffect(UNLOCK_SFX);
-		// 		break;
-		// }
-
-		// switch (curHeight) {
-		// 	case 3:
-		// 		audioCon.queueSong(LOOP3_MUSIC);
-		// 		break;
-		// 	case 2:
-		// 		audioCon.queueSong(LOOP2_MUSIC);
-		// 		break;
-		// 	case 1:
-		// 		audioCon.playSong(HEADER_MUSIC);
-		// 		audioCon.queueSong(LOOP1_MUSIC);
-		// 		break;
-		// }
+		
 	}
 
 	resetFellHeight() {
@@ -1515,6 +1491,14 @@ class Game {
 	}
 
 	setKeys(keys) {
+		keys["moveLeft"] = keys["ArrowLeft"] || keys["KeyA"];
+		keys["moveRight"] = keys["ArrowRight"] || keys["KeyD"];
+		keys["jump"] = keys["KeyZ"] || keys["KeyN"];
+		keys["slide"] = keys["KeyX"] || keys["KeyM"];
+
+		if (keys["ArrowLeft"] || keys["ArrowRight"]) this.controlScheme = 0;
+		if (keys["KeyA"] || keys["KeyD"]) this.controlScheme = 1;
+
 		if (!optionsCon.showing) {
 			if (keys["KeyO"] && !this.prevO) {
 				this.debugFlying = !this.debugFlying;
@@ -1532,17 +1516,18 @@ class Game {
 				this.getCurrentLevel().onButtonPush();
 			}
 
-			if (keys["KeyC"]) {
-				this.scoreboardFrames += 1;
-				this.showMap = true;
-
-				if (!this.prevC) audioCon.playSoundEffect(PING_SFX);
+			if (this.startTime < 1  && (keys["moveLeft"] || keys["moveRight"])) this.startTime = window.performance.now();
+			
+			const keyC = keys["KeyC"]
+			if (this.onLastLevel() && this.getCurrentLevel().endGameFrames !== 0) {
+				//Suppress c input
 			} else {
-				this.showMap = false;
-				if (this.prevC) audioCon.playSoundEffect(PONG_SFX);
+				if (keyC) this.scoreboardFrames += 1;
+				this.showMap = keyC;
+				this.cAudio(keyC, this.prevC);
 			}
-
-			keys["PrevKeyZ"] = this.prevZ;
+			
+			keys["PrevJump"] = this.prevZ;
 
 			this.prevO = keys["KeyO"];
 			this.prevH = keys["KeyH"];
@@ -1550,7 +1535,7 @@ class Game {
 			this.prevK = keys["KeyK"];
 			this.prevI = keys["KeyI"];
 			this.prevS = keys["KeyP"];
-			this.prevZ = keys["KeyZ"];
+			this.prevZ = keys["jump"];
 			this.prevC = keys["KeyC"];
 
 			this.getCurrentLevel().setKeys(keys);
@@ -1561,6 +1546,11 @@ class Game {
 			optionsCon.toggleOptions();
 		}
 		this.prevEnter = keys["Enter"];
+	}
+
+	cAudio(keyC, prevC) {
+		if (keyC && !prevC) audioCon.playSoundEffect(PING_SFX);
+		if (!keyC && prevC) audioCon.playSoundEffect(PONG_SFX);
 	}
 
 	onLastLevel() {
@@ -1612,13 +1602,10 @@ class Game {
 
 		this.respawn();
 		if (this.onLastLevel()) {
-			this.scoreboardRect.pos = Vector({x: 46, y: 128 + 128 + 36});
-			this.scoreboardRect.height = 20;
 			const t = window.performance.now();
 			this.nanosecondsSinceStart = () => {
 				return t - this.startTime;
 			};
-			this.scoreboardFrames = 1000000;
 			audioCon.fadeOutSong(750);
 		}
 	}
@@ -1628,6 +1615,7 @@ class Game {
 	}
 
 	nanosecondsSinceStart() {
+		if (this.startTime < 0) return 0;
 		return window.performance.now() - this.startTime;
 	}
 
@@ -1793,8 +1781,34 @@ class Game {
 		}
 	}
 
-	showHintText(text, pos) {
-		this.getCurrentLevel().showHintText(text, pos);
+	showHintText() {
+		this.getCurrentLevel().showHintText();
+	}
+}
+
+const keyNames = [
+	{
+		"jump": "Z",
+		"slide": "X",
+		"restart": "R",
+		"map": "C"
+	}, {
+		"jump": "N",
+		"slide": "M",
+		"restart": "R",
+		"map": "C"
+	}, 
+]
+
+function getHintText(levelInd, special) {
+	switch (levelInd) {
+		case 12:
+			if (special === 2) return {text: "Press r to restart", pos: Vector({x: 24, y:32})};
+			return {text: "Arrow keys / WASD to move", pos: Vector({x: 16, y:32})};
+		case 11: return {text: `Hold ${keyNames[game.controlScheme].map} for map`, pos: Vector({x: 54, y:16})};
+		case 10: return {text: `Press ${keyNames[game.controlScheme].jump} to jump`, pos: Vector({x: 34, y:116})};
+		case 14: return {text: `Press ${keyNames[game.controlScheme].slide} to slide through spikes`, pos: Vector({x: 3, y:32})};
+		case 15: return {text: "Jump in midair to double jump", pos: Vector({x: 8, y:8})};
 	}
 }
 
@@ -1978,7 +1992,7 @@ class WorldMap {
 	draw() {
 		const margin = 1;
 
-		const offset = Vector({x: 5, y: game.onLastLevel() ? 128 + 72 : 14});
+		const offset = Vector({x: 5, y: game.getCurrentLevel().realCamOffsetY < -80 ? 128 + 76 : 14});
 		const roomsW = 5;
 		const roomsH = 4;
 
@@ -2203,30 +2217,30 @@ class Level {
 						let y = gameSpaceY - 2;
 						let diamond = false;
 						
-						const onPickup = (unlock, particleColor, music, hintText, hintTextPos) => {
+						const onPickup = (unlock, particleColor, music) => {
 							game.unlocks[unlock] = true;
 							audioCon.playSoundEffect(UNLOCK_SFX);
 							audioCon.queueSong(music);
 							game.spawnPowerupParticles(x, y, particleColor);
-							game.showHintText(hintText, hintTextPos);
+							game.showHintText();
 						}
 						
 						switch (tileCode) {
 							case 84:
 								onPush = () => {
 									audioCon.playSong(HEADER_MUSIC);
-									onPickup("JUMP", "#ff004d", LOOP1_MUSIC, "Press z to jump", Vector({x: 34, y:116}));
+									onPickup("JUMP", "#ff004d", LOOP1_MUSIC);
 								}
 								sprite = POWERUP_JUMP_SPRITE;
 								break;
 							case 85:
 								x += 4;
-								onPush = () => onPickup("SLIDE", "#ffa300", LOOP2_MUSIC, "Press x to slide through spikes", Vector({x: 3, y:32}));
+								onPush = () => onPickup("SLIDE", "#ffa300", LOOP2_MUSIC);
 								sprite = POWERUP_SLIDE_SPRITE;
 								break;
 							case 86:
 								x+=4;
-								onPush = () => onPickup("DJ", "#188755", LOOP3_MUSIC, "Jump in midair to double jump", Vector({x: 8, y:8}));
+								onPush = () => onPickup("DJ", "#188755", LOOP3_MUSIC);
 								sprite = POWERUP_DJ_SPRITE;
 								break;
 							case 87:
@@ -2267,8 +2281,8 @@ class Level {
 		this.endLevelFrames = 0;
 		this.opacity = 0;
 
-		if (this.myLevelInd === 11) this.hintText = {text: "Hold c for map", pos: Vector({x: 54, y:16})}
-		if (this.myLevelInd === 12) this.hintText = {text: "Arrow keys to move", pos: Vector({x: 24, y:32})}
+		if (this.myLevelInd === 11) this.hintText = true;
+		if (this.myLevelInd === 12) this.hintText = true;
 	}
 
 	setCurrentSpawn(direction, playerPos) {
@@ -2314,15 +2328,17 @@ class Level {
 		});
 		this.dustSprites.forEach(i => i.draw());
 		if (this.hintText) {
-			const t = this.hintText.text;
 			const p = this.hintText.pos;
-			this.drawHintText(t, p);
+			this.drawHintText(p);
 		}
 		
 		this.drawFade();
 	}
 
-	drawHintText(text, pos) {
+	drawHintText() {
+		const data = getHintText(this.myLevelInd, this.hintText);
+		const text = data.text;
+		let pos = data.pos;
 		const color = game.animFrame % 30 < 15 ? "#fff1e8" : "#C2C3C7";
 		const yAdd = Math.round(2 * Math.sin(game.animFrame * 2 * Math.PI / 60));
 		pos = pos.addPoint(Vector({x: 0, y: yAdd}));
@@ -2597,7 +2613,7 @@ class Level {
 
 		if (this.myLevelInd === 12) {
 			const isStuck = this.player.getX() < 104 && this.player.getY() >= 106;
-			if (isStuck) this.hintText = {text: "Press r to restart", pos: Vector({x: 24, y:32})};
+			if (isStuck) this.hintText = 2;
 		}
 	}
 
@@ -2666,8 +2682,8 @@ class Level {
 		CTX.fillRect(-10, -10, canvas.width + 20, canvas.height + 20);
 	};
 
-	showHintText(text, pos) {
-		this.hintText = {text: text, pos: pos};
+	showHintText() {
+		this.hintText = true;
 	}
 }
 
@@ -2703,7 +2719,7 @@ class Level {
         let k = {
             "KeyZ": 0,
             "KeyQ": 0,
-            "ArrowRight": this.startAnimFrames > 0 ? 1 : 0
+            "moveRight": this.startAnimFrames > 0 ? 1 : 0
         };
         if(keys[checkKey] && !(checkKey === "KeyQ" ? this.prevX : this.prevZ)) {
             k[checkKey] = 1;
@@ -2833,6 +2849,14 @@ const CREDITS = [{
 	"size": 1,
 	"paddingY": 8,
 }, {
+	"text": "Daniel Carr",
+	"size": 1,
+	"paddingY": 8,
+}, {
+	"text": "Chase OBrien",
+	"size": 1,
+	"paddingY": 8,
+}, {
 	"text": "Special Thanks:",
 	"size": 1,
 	"paddingY": 24,
@@ -2861,6 +2885,8 @@ class EndScreen extends Level {
 		super(tileArr, game, levelInd);
 		this.endGameFrames = 0;
 		this.endWalkFrames = 0;
+
+		this.realCamOffsetY = 0;
 	}
 
 	drawAll() {
@@ -2923,9 +2949,15 @@ class EndScreen extends Level {
 			if (this.player.getX() !== targetX) this.player.moveX(Math.sign(targetX - this.player.getX()), this.player.onCollide);
 		}
 
-		if (game.animFrame % 5 === 0) {
-			const targetY = -1000 - this.player.getY();
-			if (this.game.cameraOffset.y !== targetY) game.cameraOffset.y += Math.sign(targetY);
+		if (this.realCamOffsetY < -80) {
+			game.scoreboardRect.pos = Vector({x: 46, y: 128 + 128 + 36});
+			game.showMap = true;
+			game.scoreboardFrames = 1000000;
+		}
+
+		if (this.realCamOffsetY > -624) {
+			this.realCamOffsetY += -timeDelta / 90;
+			game.cameraOffset.y = Math.round(this.realCamOffsetY);
 		}
 	}
 
@@ -2940,15 +2972,14 @@ class EndScreen extends Level {
 				window.location.reload();
 			}
 		}
-		game.showMap = true;
 		
 		if (this.endGameFrames === 0) {
 			super.setKeys(keys);
 		} else {
 			const k = {
-				"ArrowRight": 0,
-				"ArrowLeft": 0,
-				"KeyZ": 0,
+				"moveRight": 0,
+				"moveLeft": 0,
+				"jump": 0,
 				"KeyQ": 0,
 			};
 			super.setKeys(k);
@@ -4291,9 +4322,9 @@ class Player extends Actor {
 
 	setKeys(keys) {
 		if (this.getGame().debugFlying) {
-			if (keys["ArrowRight"]) {
+			if (keys["moveRight"]) {
 				this.setXVelocity(2);
-			} else if (keys["ArrowLeft"]) {
+			} else if (keys["moveLeft"]) {
 				this.setXVelocity(-2);
 			} else {
 				this.setXVelocity(0);
@@ -4310,7 +4341,7 @@ class Player extends Actor {
 		}
 
 		const onGround = this.isOnGround();
-		const slidePressed = keys["KeyX"] && this.getGame().unlocks.SLIDE;
+		const slidePressed = keys["slide"] && this.getGame().unlocks.SLIDE;
 
 		if (this.respawnFrames === 0 && this.deathFrames === 0) {
 			if (slidePressed && onGround && !this.sliding && this.slideBumpFrames <= 0) {
@@ -4331,10 +4362,10 @@ class Player extends Actor {
 			} else if (this.slideBumpFrames > 0) {
 				this.setXVelocity(this.slideBumpFacing.x * -1);
 			} else {
-				if (keys["ArrowRight"]) {
+				if (keys["moveRight"]) {
 					if (this.sprite.getRow() === 0 && onGround) this.sprite.setRow(1);
 					this.setXVelocity(1);
-				} else if (keys["ArrowLeft"]) {
+				} else if (keys["moveLeft"]) {
 					if (this.sprite.getRow() === 0 && onGround) this.sprite.setRow(1);
 					this.setXVelocity(-1);
 				} else {
@@ -4346,13 +4377,13 @@ class Player extends Actor {
 				this.sprite.setRow(2);
 			}
 
-			const zPressed = this.getGame().unlocks.JUMP && keys["KeyZ"] && !keys["PrevKeyZ"];
+			const zPressed = this.getGame().unlocks.JUMP && keys["jump"] && !keys["PrevJump"];
 			const xPressed = keys["KeyQ"] && !this.prevXKey;
 			//If z is pressed, jjp = 8, otherwise decr jjp if jjp > 0
 			if (zPressed) {
-				this.jumpJustPressed = 8;
+				this.jumpJustPressed = 133.3;
 			} else if (this.jumpJustPressed > 0) {
-				this.jumpJustPressed -= 1;
+				this.jumpJustPressed -= timeDelta;
 			}
 
 			if (onGround && onGround.onPlayerCollide() === "wall" && !this.wasOnGround) {
@@ -4384,7 +4415,7 @@ class Player extends Actor {
 					}
 				}
 			} else {
-				this.coyoteTime = 8;
+				this.coyoteTime = 133.3;
 				this.canDoubleJump = true;
 				if (this.jumpJustPressed > 0) {
 					//Jump if jjp and on ground now
@@ -4401,41 +4432,8 @@ class Player extends Actor {
 			}
 
 			if (this.coyoteTime > 0) {
-				this.coyoteTime -= 1;
+				this.coyoteTime -= timeDelta;
 			}
-			if (!this.carrying) {
-				if (xPressed) {
-					this.xJustPressed = 2;
-				} else if (this.xJustPressed > 0) {
-					this.xJustPressed -= 1;
-				}
-				const touching = super.getLevel().isTouchingThrowable(this);
-				if ((this.xoyoteTime > 0 && xPressed) || (this.xJustPressed && touching)) {
-					this.coyoteTime = Math.max(4, this.coyoteTime);
-					this.pickUp();
-				}
-				if (touching) {
-					this.xoyoteTime = 8;
-				} else if (this.xoyoteTime > 0) {
-					this.xoyoteTime -= 1;
-				}
-			} else if (xPressed) {
-				this.carrying.throw(this.facing);
-				this.carrying = null;
-				this.getGame().startScreenShake();
-				audioCon.playSoundEffect(THROW_SFX);
-			}
-			// if (this.slideTimer > 1) {
-			// 	if (!this.getLevel().isLeftOfWall(this) && !this.getLevel().isRightOfWall(this)) {
-			// 		// this.slideTimer = 0;
-			// 		this.slideBump(this.facing);
-			// 		this.sliding = false;
-			// 	}
-			// 	this.slideTimer--;
-			// } else if (this.slideTimer === 1) {
-			// 	this.sliding = false;
-			// 	this.slideTimer = 0;
-			// }
 
 			if (this.slideBumpFrames > 0) {
 				this.slideBumpFrames--;
@@ -4711,7 +4709,7 @@ let keys = {
 	"ArrowDown": 0,
 	"ArrowUp": 0,
 	"KeyZ": 0,
-	"PrevKeyZ": 0,
+	"PrevJump": 0,
 	"KeyX": 0,
 	"KeyQ": 0,
 
@@ -4729,22 +4727,12 @@ let keys = {
 	"KeyR": 0,
 	"Enter": 0,
 
+	"KeyW": 0,
 	"KeyA": 0,
-	"KeyB": 0,
+	"KeyS": 0,
 	"KeyD": 0,
-	"KeyE": 0,
-	"KeyF": 0,
-	"Digit0": 0,
-	"Digit1": 0,
-	"Digit2": 0,
-	"Digit3": 0,
-	"Digit4": 0,
-	"Digit5": 0,
-	"Digit6": 0,
-	"Digit7": 0,
-	"Digit8": 0,
-	"Digit9": 0,
-	"Backspace": 0,
+	"KeyN": 0,
+	"KeyM": 0,
 };
 
 let diagnosticFrameCount = 0;
@@ -4767,6 +4755,26 @@ function diagnostics() {
 	a = 0;
 }
 
+
+function setMaxSize() {
+	const screenHeight = screen.height;
+	const size = Math.floor(screenHeight / 128) * 128;
+	const displayStyle = "flex";
+	canvas.style.width = size + "px";
+	canvas.style.height = size + "px";
+	canvas.style.backgroundSize = size + "px";
+	document.getElementById("body").style.display = displayStyle;
+}
+
+const toggleFullscreen = (event) => {
+	const fullScreen = document.fullscreenElement;
+	if (fullScreen) {
+		document.exitFullscreen();
+	} else {
+		document.documentElement.requestFullscreen();
+	}
+};
+
 function g() {
 	clearCanvas();
 	game.updateLevelPhysicsPos();
@@ -4781,7 +4789,7 @@ function g() {
 function setup() {
 	document.addEventListener('keydown', keyDownHandler, false);
 	document.addEventListener('keyup', keyUpHandler, false);
-
+	setMaxSize();
 	getLevelData().then(levelData => {
 		game = new Game(levelData);
 		main();
@@ -4805,24 +4813,6 @@ function keyUpHandler(event) {
 		keys[event.code] = 0;
 	}
 }
-
-const toggleFullscreen = (event) => {
-	const fullScreen = document.fullscreenElement;
-	let size = 512;
-	let displayStyle = "block";
-	if (fullScreen) {
-		document.exitFullscreen();
-	} else {
-		document.documentElement.requestFullscreen();
-		const screenHeight = screen.height;
-		size = Math.floor(screenHeight / 128) * 128;
-		displayStyle = "flex";
-	}
-	canvas.style.width = size + "px";
-	canvas.style.height = size + "px";
-	canvas.style.backgroundSize = size + "px";
-	document.getElementById("body").style.display = displayStyle;
-};
 
 canvas.ondblclick = () => {
 	toggleFullscreen();
