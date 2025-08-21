@@ -39,7 +39,12 @@ const MAIN_CHARA_SPRITESHEET = document.getElementById("main-chara-spritesheet")
 const SPRING_SPRITESHEET = document.getElementById("spring-spritesheet");
 const SPAWN_SPRITESHEET = document.getElementById("spawn-spritesheet");
 const SKULL_IMG = document.getElementById("skull-img");
-const DIAMOND_IMG = document.getElementById("diamond-img");
+const DIAMOND_IMGS = [
+	document.getElementById("diamond-img"),
+	document.getElementById("diamond-special-img"),
+	document.getElementById("diamond-fast-img")
+];
+
 const THROWABLE_SPRITESHEET = document.getElementById("throwable-spritesheet");
 const FLAME_SPRITESHEET = document.getElementById("flame-spritesheet");
 const GOD_RAY_IMG = document.getElementById("god-ray-img");
@@ -63,6 +68,8 @@ const BAT_SPRITESHEET = document.getElementById("bat-spritesheet");
 const DEATH_SPRITESHEET = document.getElementById("death-spritesheet");
 const TITLE_IMG = document.getElementById("title-img");
 const ARROW_IMG = document.getElementById("arrow-img");
+
+const DJBLOCKER_SPRITE = document.getElementById("djblocker-img");
 
 const POWERUP_JUMP_SPRITE = document.getElementById("powerup-jump");
 const POWERUP_SLIDE_SPRITE = document.getElementById("powerup-slide");
@@ -644,7 +651,7 @@ class AudioController {
 	}
 
 	playSong(song, stopOnEnd) {
-		this.nowPlaying = song._src;
+		this.nowPlaying = song;
 		song.volume(this.getMaxVolume(song) * this.musicVolume);
 		this.curSongId = song.play();
 		this.curSong = song;
@@ -657,11 +664,11 @@ class AudioController {
 	}
 
 	fadeOutSong(ms) {
-		if (this.curSong) {
-			this.curSong.fade(1,0,ms,this.curSongId);
-			this.curSong.off('end');
+		if (this.nowPlaying) {
+			this.nowPlaying.fade(this.getMaxVolume(this.nowPlaying) * this.musicVolume, 0,ms,this.curSongId);
+			this.nowPlaying.off('end');
+			this.nowPlaying = null;
 		}
-		this.ambiance.fade(1, 0, ms);
 	}
 
 	stopSong() {
@@ -1355,7 +1362,7 @@ class Game {
 			// if(levelInd === 0) {level = new StartScreen(sliceArr, this);}
 
 			const arrCopy = [...sliceArr];
-			if (levelInd === 2) {
+			if (levelInd === 2 || levelInd === 4 || levelInd === 0) {
 				level = new EndScreen(sliceArr, this, levelInd);
 			} else {
 				level = new Level(sliceArr, this, levelInd);
@@ -1603,7 +1610,7 @@ class Game {
 		this.respawn();
 		if (this.onLastLevel()) {
 			const t = window.performance.now();
-			this.nanosecondsSinceStart = () => {
+			this.milisecondsSinceStart = () => {
 				return t - this.startTime;
 			};
 			audioCon.fadeOutSong(750);
@@ -1614,13 +1621,17 @@ class Game {
 		return new Date(ns).toISOString().substr(11, 11)
 	}
 
-	nanosecondsSinceStart() {
+	milisecondsSinceStart() {
 		if (this.startTime < 0) return 0;
 		return window.performance.now() - this.startTime;
 	}
 
+	didGoFast() {
+		return this.milisecondsSinceStart() < 180 * 1000;
+	}
+
 	formatTimeSinceStart() {
-		return this.formatTimeNs(this.nanosecondsSinceStart());
+		return this.formatTimeNs(this.milisecondsSinceStart());
 	}
 
 	death() {
@@ -1992,14 +2003,14 @@ class WorldMap {
 	draw() {
 		const margin = 1;
 
-		const offset = Vector({x: 5, y: game.getCurrentLevel().realCamOffsetY < -80 ? 128 + 76 : 14});
+		const offset = Vector({x: 5, y: game.getCurrentLevel().endGameFrames === 1 ? 128 + 76 : 14});
 		const roomsW = 5;
 		const roomsH = 4;
 
 		drawOnCanvas(new Rectangle(16 + offset.x - 1, offset.y + 15, ((16 + margin) * roomsW) + 3, (16 + margin) * roomsH + 3), "#FFCCAA");
 		drawOnCanvas(new Rectangle(16 + offset.x, offset.y + 16, ((16 + margin) * roomsW) + 1, (16 + margin) * roomsH + 1), "#1E2B53");
 		this.mapSections.forEach((m, i) => {
-			if ([0,1,3,4].includes(i)) return;
+			//if ([0,1,3,4].includes(i)) return;
 
 			const x = (m.level.location.x + 1) * (TILE_MAP_SIZE[0] + margin) + offset.x;
 			const y = (m.level.location.y + 1) * (TILE_MAP_SIZE[1] + margin) + offset.y;
@@ -2081,6 +2092,7 @@ class Level {
 		this.spawn;
 		this.switchBlocks = [];
 		this.buttons = [];
+		this.djBlockFrames = 0;
 
 		let locationX;
 		let locationY;
@@ -2208,14 +2220,27 @@ class Level {
 						this.solids.push(new Wall(gameSpaceX, gameSpaceY, TILE_SIZE, TILE_SIZE, this, WALL_TILESHEET_CORNER, vec));
 						break;
 					case 20:
-						this.solids.push(new Collectible(gameSpaceX, gameSpaceY));
+						switch(tileCode) {
+							case 80:
+								this.solids.push(new DJBlocker(gameSpaceX, gameSpaceY, this));
+								break;
+							case 81:
+							case 82:
+							case 83:
+								const onPush = () => {
+									game.endGame();
+									audioCon.playSoundEffect(GEM_PICKUP_SFX);
+									audioCon.playSong(END_MUSIC);
+								}
+								this.solids.push(new DiamondPowerup(gameSpaceX + 2, gameSpaceY - 2, this, onPush, tileCode - 81));
+								break;
+							}
 						break;
 					case 21:
 						let onPush;
 						let sprite;
 						let x = gameSpaceX - 2;
 						let y = gameSpaceY - 2;
-						let diamond = false;
 						
 						const onPickup = (unlock, particleColor, music) => {
 							game.unlocks[unlock] = true;
@@ -2243,19 +2268,8 @@ class Level {
 								onPush = () => onPickup("DJ", "#188755", LOOP3_MUSIC);
 								sprite = POWERUP_DJ_SPRITE;
 								break;
-							case 87:
-								x+=4;
-								onPush = () => {
-									game.endGame();
-									audioCon.playSoundEffect(GEM_PICKUP_SFX);
-									audioCon.playSong(END_MUSIC);
-								}
-								sprite = DIAMOND_IMG;
-								this.solids.push(new DiamondPowerup(x, y, this, onPush, sprite));
-								diamond = true;
-								break;
 						}
-						if (!diamond) this.solids.push(new Powerup(x, y, this, onPush, sprite));
+						this.solids.push(new Powerup(x, y, this, onPush, sprite));
 						break;
 					//Meta
 					case 64:
@@ -2331,8 +2345,72 @@ class Level {
 			const p = this.hintText.pos;
 			this.drawHintText(p);
 		}
-		
+
+		if (this.djBlockFrames > 0) {
+			if (this.myLevelInd === 3 && game.unlocks.DJ) {
+				this.drawDJBlockText(this.djBlockFrames);
+			} else if (this.myLevelInd === 1 && !game.didGoFast()) {
+				this.drawGoFastBlockText(this.djBlockFrames);
+			}
+		}
+
 		this.drawFade();
+	}
+
+	drawGoFastBlockText(djFrames) {
+		const i = Math.floor(djFrames / 5);
+		const yAdd = Math.round(2 * Math.sin(game.animFrame * 2 * Math.PI / 60));
+
+		if (i >= 24) {
+			let text = "180 seconds to pass."
+			text = text.substring(0, i-24);
+			let pos = Vector({x: 8, y: 16});
+
+			const color = game.animFrame % 30 < 15 ? "#fff1e8" : "#C2C3C7";
+			pos = pos.addPoint(Vector({x: 0, y: yAdd}));
+			writeText(text, 1, pos, color);
+		}
+
+		let text = "Reach this point in under"
+		text = text.substring(0, i);
+		let pos = Vector({x: 8, y: 8});
+
+		const color = game.animFrame % 30 < 15 ? "#fff1e8" : "#C2C3C7";
+		pos = pos.addPoint(Vector({x: 0, y: yAdd}));
+		writeText(text, 1, pos, color);
+	}
+
+	drawDJBlockText(djFrames) {
+		const i = Math.floor(djFrames / 5);
+		const yAdd = Math.round(2 * Math.sin(game.animFrame * 2 * Math.PI / 60));
+		
+		if (i >= 24 + 25) {
+			let text = "to pass."
+			text = text.substring(0, i-24-25);
+			let pos = Vector({x: 8, y: 24});
+
+			const color = game.animFrame % 30 < 15 ? "#fff1e8" : "#C2C3C7";
+			pos = pos.addPoint(Vector({x: 0, y: yAdd}));
+			writeText(text, 1, pos, color);
+		}
+
+		if (i >= 24) {
+			let text = "unlocking the double jump"
+			text = text.substring(0, i-24);
+			let pos = Vector({x: 8, y: 16});
+
+			const color = game.animFrame % 30 < 15 ? "#fff1e8" : "#C2C3C7";
+			pos = pos.addPoint(Vector({x: 0, y: yAdd}));
+			writeText(text, 1, pos, color);
+		}
+
+		let text = "Reach this point without"
+		text = text.substring(0, i);
+		let pos = Vector({x: 8, y: 8});
+
+		const color = game.animFrame % 30 < 15 ? "#fff1e8" : "#C2C3C7";
+		pos = pos.addPoint(Vector({x: 0, y: yAdd}));
+		writeText(text, 1, pos, color);
 	}
 
 	drawHintText() {
@@ -2478,6 +2556,22 @@ class Level {
 		if (this.endLevelFrames > 1) {
 			this.endLevelFrames -= 1;
 			this.fade(1 - this.endLevelFrames / 32);
+		}
+
+		if (this.myLevelInd === 3) {
+			if (game.unlocks.DJ && this.player.getX() > 24 && this.player.getX() < 48) {
+				this.djBlockFrames++;
+				if (this.djBlockFrames % 5 === 0 && this.djBlockFrames < 280) audioCon.playSoundEffect(PONG_SFX);
+			} else {
+				this.djBlockFrames = 0;
+			}
+		} else if (this.myLevelInd === 1) {
+			if (!game.didGoFast() && this.player.getX() > 80 && this.player.getX() < 80 + 16) {
+				this.djBlockFrames++;
+				if (this.djBlockFrames % 5 === 0 && this.djBlockFrames < 215) audioCon.playSoundEffect(PONG_SFX);
+			} else {
+				this.djBlockFrames = 0;
+			}
 		}
 	}
 
@@ -2905,9 +2999,11 @@ class EndScreen extends Level {
 			this.fade(1 - (this.endGameFrames / (ENDGAME_ANIM_FRAMES - ENDGAME_OFFSET_FRAMES)));
 			this.endGameFrames -= 1;
 			this.drawFade();
+			game.showMap = false;
 			const diamond = this.solids.find(e => e.isDiamond);
 			if (diamond) diamond.draw();
 		} else if (this.endGameFrames === 1) {
+			game.showMap = true;
 			this.fade(1 - (this.endGameFrames / (ENDGAME_ANIM_FRAMES - ENDGAME_OFFSET_FRAMES)));
 			this.drawFade();
 			this.centerPlayer();
@@ -2951,7 +3047,6 @@ class EndScreen extends Level {
 
 		if (this.realCamOffsetY < -80) {
 			game.scoreboardRect.pos = Vector({x: 46, y: 128 + 128 + 36});
-			game.showMap = true;
 			game.scoreboardFrames = 1000000;
 		}
 
@@ -4026,7 +4121,7 @@ function drawLine(x0, y0, x1, y1) {
 class DiamondThrowable extends StickyThrowable {
 	constructor(x, y, w, h, level) {
 		super(x, y, w, h, level);
-		this.setSprite(new Sprite(DIAMOND_IMG, null));
+		this.setSprite(new Sprite(DIAMOND_IMGS[0], null));
 	}
 
 	onPlayerCollide() {
@@ -4517,19 +4612,25 @@ class SwitchBlock extends Solid {
 	}
 }
 
-class Collectible extends Solid {
-	constructor(x, y) {
-		super(x, y, TILE_SIZE, TILE_SIZE);
-		this.timingOffset = Math.random()*30;
+class DJBlocker extends Solid {
+	constructor(x, y, level) {
+		super(x, y, TILE_SIZE, TILE_SIZE, true, level);
+		super.setSprite(new Sprite(DJBLOCKER_SPRITE));
+		
+		if (level.myLevelInd === 1) {
+			this.unlockCondition = () => !game.didGoFast();
+		} else if (level.myLevelInd === 3) {
+			this.unlockCondition = () => game.unlocks.DJ;
+		}
 	}
 
 	onPlayerCollide() {
-		return "collectible";
+		return this.unlockCondition() ? "wall" : "djblocker";
 	}
 
 	draw() {
-		const offset = Math.sin(Math.PI * game.animFrame / 30 + this.timingOffset) * 0.6;
-		drawEllipse(this.getX()+4, this.getY() - 4 + offset, 4, "rgb(194, 206, 31)","rgb(194, 206, 31)");
+		if (this.unlockCondition()) {super.draw(); this.collidable = true;}
+		else this.collidable = false;
 	}
 }
 
@@ -4574,13 +4675,33 @@ class Button extends Solid {
 	}
 }
 
+const diamondColors = [
+	{
+		"rgb": "255,0,77",
+		"color0": "7e2553",
+		"color1": "ff004d",
+		"color2": "126, 37, 83"
+	}, {
+		"rgb": "0,135,81",
+		"color0": "008751",
+		"color1": "00e436",
+		"color2": "29,83,81"
+	}, {
+		"rgb": "255,163,0",
+		"color0": "ab5236",
+		"color1": "ffa300",
+		"color2": "171, 82, 54"
+	}
+]
+
 class DiamondPowerup extends Button {
-	constructor(x, y, level, onPush, sprite) {
+	constructor(x, y, level, onPush, special) {
 		super(x, y, 14, 14, level, onPush);
-		this.setSprite(new AnimatedSprite(sprite, null, [{frames: 0}, {frames: 4, onComplete: "loop", nth: 15}], 12, 13));
+		this.setSprite(new AnimatedSprite(DIAMOND_IMGS[special], null, [{frames: 0}, {frames: 4, onComplete: "loop", nth: 15}], 12, 13));
 		this.getSprite().setRow(1);
 
 		this.isDiamond = true;
+		this.special = special;
 	}
 
 	draw() {
@@ -4593,26 +4714,33 @@ class DiamondPowerup extends Button {
 		}
 		this.getSprite().draw(this.getX(), this.getY());
 		const radOff = 0.5 * Math.sin(game.animFrame / 30 * Math.PI);
-		drawEllipse(this.getX()+6, this.getY()+5 + Math.floor(this.getSprite().curCol / 2), 12+radOff/2, "rgba(255,0,77,0.3)", "rgba(255,0,77,0)");
+
+		const color = diamondColors[this.special].rgb;
+		drawEllipse(this.getX()+6, this.getY()+5 + Math.floor(this.getSprite().curCol / 2), 12+radOff/2, `rgba(${color},0.3)`,`rgba(${color},0)`);
 	}
 
 	drawLines() {
 		const yOff = 5;
 		const xOff = 5;
 
+		const color0 = diamondColors[this.special].color0;
+		const color1 = diamondColors[this.special].color1;
+
 		const numLines = 16;
 		const radOff = 0.5 * Math.sin(game.animFrame / 30 * Math.PI);
 		for (let i = 0; i < numLines; ++i) {
 			let angle = 2 * Math.PI * (i + game.animFrame / 30) / numLines;
-			CTX.fillStyle = "#7e2553a0";
+			CTX.fillStyle = `#${color0}a0`;
 			this.drawLineAround(this.getX() + xOff, this.getY() + yOff, angle, 20, 28 + radOff);
 			if (i % 2 === 0) {
-				CTX.fillStyle = "#ff004de0";
+				CTX.fillStyle = `#${color1}e0`;
 				this.drawLineAround(this.getX() + xOff, this.getY() + yOff, -angle, 8, 16);
 			}
 		}
-		drawEllipse(this.getX() + xOff, this.getY() + yOff, 36 + radOff * 2, "rgba(126, 27, 83, 0.2)", "rgba(126, 27, 83, 0)");
-		drawEllipse(this.getX() + xOff, this.getY() + yOff, 24 + radOff * 2, "rgba(126, 27, 83, 0.3)", "rgba(126, 27, 83, 0)");
+
+		const color2 = diamondColors[this.special].color2;
+		drawEllipse(this.getX() + xOff, this.getY() + yOff, 36 + radOff * 2, `rgba(${color2}, 0.2)`, `rgba(${color2}, 0)`);
+		drawEllipse(this.getX() + xOff, this.getY() + yOff, 24 + radOff * 2, `rgba(${color2}, 0.3)`, `rgba(${color2}, 0)`);
 	}
 
 	drawLineAround(x, y, angle, rad1, rad2) {
@@ -4713,13 +4841,13 @@ let keys = {
 	"KeyX": 0,
 	"KeyQ": 0,
 
-	//Debug keys
-	"KeyO": 0, //fly
-	"KeyH": 0, //jump
-	"KeyJ": 0,
-	"KeyK": 0,
-	"KeyL": 0,
-	"KeyI": 0,
+	// //Debug keys
+	// "KeyO": 0, //fly
+	// "KeyH": 0, //jump
+	// "KeyJ": 0,
+	// "KeyK": 0,
+	// "KeyL": 0,
+	// "KeyI": 0,
 
 
 	// "KeyP" : 0,
