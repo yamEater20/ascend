@@ -4757,13 +4757,11 @@ function diagnostics() {
 
 
 function setMaxSize() {
-	const screenHeight = screen.height;
+	const screenHeight = document.body.scrollHeight;
 	const size = Math.floor(screenHeight / 128) * 128;
-	const displayStyle = "flex";
 	canvas.style.width = size + "px";
 	canvas.style.height = size + "px";
 	canvas.style.backgroundSize = size + "px";
-	document.getElementById("body").style.display = displayStyle;
 }
 
 const toggleFullscreen = (event) => {
@@ -4781,6 +4779,7 @@ function g() {
 	game.setKeys(keys);
 	game.drawCurrentLevel();
 	diagnostics();
+	setMaxSize();
 }
 ;(function () {
 	setup();
