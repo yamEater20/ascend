@@ -4932,12 +4932,12 @@ let keys = {
 	"KeyQ": 0,
 
 	// //Debug keys
-	"KeyO": 0, //fly
-	"KeyH": 0, //jump
-	"KeyJ": 0,
-	"KeyK": 0,
-	"KeyL": 0,
-	"KeyI": 0,
+	// "KeyO": 0, //fly
+	// "KeyH": 0, //jump
+	// "KeyJ": 0,
+	// "KeyK": 0,
+	// "KeyL": 0,
+	// "KeyI": 0,
 
 
 	// "KeyP" : 0,
