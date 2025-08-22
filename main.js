@@ -379,6 +379,21 @@ const PIXEL_LETTERS = {
 		[, ,],
 		[1, ,]
 	],
+	'\'': [
+		[1,],
+		[1,],
+		[,,],
+		[,,],
+		[,,]
+	],
+	',': [
+		[,,],
+		[,,],
+		[, ,],
+		[,,],
+		[,1,],
+		[1,,]
+	],
 	'!': [
 		[, 1,],
 		[, 1,],
@@ -566,6 +581,9 @@ const LOOP3_MUSIC = new Howl({
 });
 const END_MUSIC = new Howl({
 	src: ['Songs/velvetCredits.ogg'], loop: true,
+});
+const FORMAL_COMPLAINT_MUSIC = new Howl({
+	src: ['Songs/formal-complaint.mp3'], loop: true,
 });
 const DEATH_SFX = new Howl({
 	src: ['sfx/Death.wav'], loop: false,
@@ -1372,6 +1390,9 @@ class Game {
 
 			this.levels.push(level);
 		}
+
+		this.oobScreen = new OOBScreen();
+
 		this.levelInd = 12;
 		this.visitedLevels[this.levelInd] = true;
 
@@ -1405,6 +1426,7 @@ class Game {
 	}
 
 	getCurrentLevel() {
+		if (this.levelInd < 0) return this.oobScreen;
 		return this.levels[this.levelInd];
 	}
 
@@ -1592,9 +1614,12 @@ class Game {
 	}
 
 	setLevel(ind, direction, playerPos) {
+		
 		this.getCurrentLevel().dustSprites = [];
 
 		this.levelInd = ind;
+		if (ind < 0) return;
+
 		this.visitedLevels[ind] = true;
 		/*if(this.levelInd > 0 && this.levelInd < 11) {
             if(audioCon.curSong._src !== STAGE1_MUSIC._src && audioCon.curSong._src !== BEGINNING_MUSIC._src) {audioCon.playSong(STAGE1_MUSIC);}
@@ -2947,7 +2972,7 @@ const CREDITS = [{
 	"size": 1,
 	"paddingY": 8,
 }, {
-	"text": "Chase OBrien",
+	"text": "Chase O'Brien",
 	"size": 1,
 	"paddingY": 8,
 }, {
@@ -2973,6 +2998,71 @@ const CREDITS = [{
 }
 
 ];
+
+class OOBScreen {
+
+	constructor() {
+		this.frame = 0;
+		this.ind = 0;
+		this.lastInd = 0;
+		this.formalComplaintFiled = false;
+
+		this.strs = [
+			"Dear player,",
+			"",
+			"It appears you have broken out",
+			"of bounds somehow, probably by",
+			"jumping off the pedestal in",
+			"the yellow diamond room.",
+			"Please press r to file a formal",
+			"complaint.",
+			"",
+			"Sincerely,",
+			"YamEater (the dev)"
+		]
+
+		this.strLengthSums = [0];
+		for (let i = 1; i < this.strs.length+1; ++i) {
+			this.strLengthSums.push(this.strLengthSums[i-1] + this.strs[i-1].length);
+		}
+	}
+
+	drawAll() {
+		CTX.fill = "black";
+		CTX.fillRect(0, 0, PIXEL_GAME_SIZE[0], PIXEL_GAME_SIZE[1]);
+
+		this.strs.forEach((str, i) => {
+			if (this.ind > this.strLengthSums[i]) {
+				const y = (i + 1) * 8;
+				writeText(str.substring(0, this.ind - this.strLengthSums[i]), 1, Vector({x: 8, y: y}), "white");
+			}
+		});
+	}
+
+	setKeys(keys) {
+		if (this.ind === 0) audioCon.fadeOutSong(0);
+		if (!this.formalComplaintFiled && keys["KeyR"]) {
+			canvas.style.display = "none";
+			audioCon.sfxVolume = 0;
+			const iframe = document.getElementById("formal-complaint");
+			iframe.style.display = "block";
+			audioCon.playSong(FORMAL_COMPLAINT_MUSIC, true);
+			this.formalComplaintFiled = true;
+		}
+	}
+
+	updatePhysicsAllPos() {
+		this.frame += timeDelta;
+		this.ind = Math.round(this.frame / 100);
+
+		if (this.ind > this.lastInd && this.ind < this.strLengthSums[this.strLengthSums.length-1]) audioCon.playSoundEffect(Math.random() > 0.5 ? PONG_SFX : PING_SFX);
+
+		this.lastInd = this.ind;
+	}
+
+	spawnBat() {}
+	spawnDrop() {}
+}
 
 class EndScreen extends Level {
 	constructor(tileArr, game, levelInd) {
@@ -4842,12 +4932,12 @@ let keys = {
 	"KeyQ": 0,
 
 	// //Debug keys
-	// "KeyO": 0, //fly
-	// "KeyH": 0, //jump
-	// "KeyJ": 0,
-	// "KeyK": 0,
-	// "KeyL": 0,
-	// "KeyI": 0,
+	"KeyO": 0, //fly
+	"KeyH": 0, //jump
+	"KeyJ": 0,
+	"KeyK": 0,
+	"KeyL": 0,
+	"KeyI": 0,
 
 
 	// "KeyP" : 0,
