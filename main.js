@@ -534,6 +534,9 @@ const Vector = ({x, y}) => ({
 	// scalarY(scalar) {return(Vector({x: this.x, y:this.y*scalar}));},
 	scalar(s) {
 		return (Vector({x: this.x * s, y: this.y * s}));
+	},
+	magnitude() {
+		return Math.sqrt(this.x * this.x + this.y * this.y);
 	}
 });
 
@@ -1370,6 +1373,7 @@ class Game {
 		this.lastFacing = VectorRight;
 		this.lastSliding = false;
 		this.canDoubleJump = false;
+		this.diamonds = [];
 
 		this.map = new WorldMap(this);
 		this.numLevels = levelData.numLevels;
@@ -1437,6 +1441,7 @@ class Game {
 		if (this.scoreboardFrames > 0) {
 			this.drawScoreboard();
 		}
+		if (this.levelInd != -1) this.diamonds.forEach(d => d.draw());
 		if (this.showMap) this.map.draw();
 		if (this.animFrame % 60 === 0) {
 			this.secondsUntilBat -= 1;
@@ -1461,6 +1466,17 @@ class Game {
 		if (optionsCon.showing) {
 			optionsCon.draw();
 		}
+	}
+
+	getMaxNumDiamonds() {
+		let ret = 1;
+		if (!this.unlocks.DJ) ret++;
+		if (this.didGoFast()) ret++;
+		return ret;
+	}
+
+	getNumDiamonds() {
+		return this.diamonds.length;
 	}
 
 	onBigButtonPush(curHeight) {
@@ -1599,6 +1615,7 @@ class Game {
 			if (!optionsCon.showing) {
 
 				this.getCurrentLevel().updatePhysicsAllPos();
+				if (this.levelInd != -1) this.diamonds.forEach(d => d.updatePhysicsPos());
 				if (this.screenShakeFrames > 0) {
 					this.shakeScreen();
 				}
@@ -1614,11 +1631,18 @@ class Game {
 	}
 
 	setLevel(ind, direction, playerPos) {
-		
 		this.getCurrentLevel().dustSprites = [];
 
 		this.levelInd = ind;
 		if (ind < 0) return;
+
+		if (this.onLastLevel() && !this.visitedLevels[ind]) {
+			const t = window.performance.now();
+			this.milisecondsSinceStart = () => {
+				return t - this.startTime;
+			};
+			audioCon.fadeOutSong(750);
+		}
 
 		this.visitedLevels[ind] = true;
 		/*if(this.levelInd > 0 && this.levelInd < 11) {
@@ -1631,15 +1655,7 @@ class Game {
 		this.getCurrentLevel().setCurrentSpawn(direction, playerPos);
 		this.getCurrentLevel().resetStage(true);
 		this.getPlayer().setYVelocity(this.lastYVelocity);
-
-		this.respawn();
-		if (this.onLastLevel()) {
-			const t = window.performance.now();
-			this.milisecondsSinceStart = () => {
-				return t - this.startTime;
-			};
-			audioCon.fadeOutSong(750);
-		}
+		this.diamonds.forEach(d => {d.setRealPos(this.getPlayer().getPos())});
 	}
 
 	formatTimeNs(ns) {
@@ -1794,6 +1810,8 @@ class Game {
 	}
 
 	endGame() {
+		audioCon.playSong(END_MUSIC);
+		this.getPlayer().sliding = false;
 		this.getCurrentLevel().endGame();
 	}
 
@@ -1819,6 +1837,11 @@ class Game {
 
 	showHintText() {
 		this.getCurrentLevel().showHintText();
+	}
+
+	pushDiamond(d) {
+		this.diamonds.push(d);
+		return this.diamonds.length;
 	}
 }
 
@@ -2252,12 +2275,7 @@ class Level {
 							case 81:
 							case 82:
 							case 83:
-								const onPush = () => {
-									game.endGame();
-									audioCon.playSoundEffect(GEM_PICKUP_SFX);
-									audioCon.playSong(END_MUSIC);
-								}
-								this.solids.push(new DiamondPowerup(gameSpaceX + 2, gameSpaceY - 2, this, onPush, tileCode - 81));
+								this.solids.push(new DiamondPowerup(gameSpaceX + 2, gameSpaceY - 2, this, tileCode - 81));
 								break;
 							}
 						break;
@@ -2522,13 +2540,8 @@ class Level {
 		this.dustSprites.push(g);
 	}
 
-	newGhostSpring(playerX, playerY) {
-		this.solids.push(new GhostSpring(playerX, playerY + 6, TILE_SIZE - 3, 3, VectorUp, this));
-		// this.actors.push(new Spring(gameSpaceX, gameSpaceY + TILE_SIZE - 3, TILE_SIZE, 3, direction, this));
-	}
-
-	removeGhostSpring(g) {
-		const index = this.solids.indexOf(g);
+	removeSolid(s) {
+		const index = this.solids.indexOf(s);
 		if (index > -1) {
 			this.solids.splice(index, 1);
 		}
@@ -3219,6 +3232,10 @@ class PhysObj {
 		this.hitbox.setY(y);
 	}
 
+	setPos(p) {
+		this.hitbox.setPos(p);
+	}
+
 	incrX(dx) {
 		this.hitbox.incrX(dx);
 	}
@@ -3882,21 +3899,6 @@ class Spring extends Actor {
 		return true;
 	}
 }
-
-/*class GhostSpring extends Spring {
-    constructor(x, y, w, h, direction, level) {
-        super(x, y, w, h, direction, level);
-        this.setX(x);
-        this.setY(y);
-        this.width = w;
-        this.height = h;
-    }
-
-    bounceObj(physObj) {
-        super.bounceObj(physObj);
-        this.getLevel().removeGhostSpring(this);
-    }
-}*/
 
 class PlayerKill extends Solid {
 	constructor(x, y, w, h, level, direction) {
@@ -4785,28 +4787,53 @@ const diamondColors = [
 ]
 
 class DiamondPowerup extends Button {
-	constructor(x, y, level, onPush, special) {
-		super(x, y, 14, 14, level, onPush);
+	constructor(x, y, level, special) {
+		super(x, y, 14, 14, level);
+		this.onPush = this.onCollect;
 		this.setSprite(new AnimatedSprite(DIAMOND_IMGS[special], null, [{frames: 0}, {frames: 4, onComplete: "loop", nth: 15}], 12, 13));
 		this.getSprite().setRow(1);
 
 		this.isDiamond = true;
 		this.special = special;
+		this.following = false;
+		this.realPos = this.getPos();
+		this.index = 0;
+	}
+
+	onCollect() {
+		this.index = game.pushDiamond(this);
+
+		audioCon.playSoundEffect(GEM_PICKUP_SFX);
+		if (game.getNumDiamonds() + 1 > game.getMaxNumDiamonds()) {
+			game.endGame();
+		}
+		this.followPlayer();
+	}
+
+	followPlayer() {
+		this.following = true;
+		this.level.removeSolid(this);
 	}
 
 	draw() {
-		if (this.pushed) this.drawLines();
-		if (this.getLevel().endGameFrames > 0) {
-			const pos = game.getPlayer().getPos();
-			pos.incrPoint(Vector({x:-3,y: -13}));
-			this.setX(pos.x);
-			this.setY(pos.y);
-		}
+		// if (this.following) this.drawSmallLines();
+		if (game.getCurrentLevel().endGameFrames > 0) this.drawLines();
 		this.getSprite().draw(this.getX(), this.getY());
 		const radOff = 0.5 * Math.sin(game.animFrame / 30 * Math.PI);
 
 		const color = diamondColors[this.special].rgb;
 		drawEllipse(this.getX()+6, this.getY()+5 + Math.floor(this.getSprite().curCol / 2), 12+radOff/2, `rgba(${color},0.3)`,`rgba(${color},0)`);
+	}
+
+	drawSmallLines() {
+		const xOff = 5;
+		const yOff = 5;
+		const color1 = diamondColors[this.special].color1;
+		for (let i = 0; i < 8; ++i) {
+			let angle = 2 * Math.PI * (i + game.animFrame / 30) / 8;
+			CTX.fillStyle = `#${color1}e0`;
+			this.drawLineAround(this.getX() + xOff, this.getY() + yOff, -angle, 8, 16);
+		}
 	}
 
 	drawLines() {
@@ -4841,6 +4868,50 @@ class DiamondPowerup extends Button {
 		let x1 = Math.round(x + xCos * rad2);
 		let y1 = Math.round(y + ySin * rad2);
 		drawLine(x0, y0, x1, y1);
+	}
+
+	setRealPos(p) {
+		this.realPos = p;
+		this.setX(p.x);
+		this.setY(p.y)
+	}
+
+	updatePhysicsPos() {
+		if (this.following) {
+			const isEndGame = game.getCurrentLevel().endGameFrames > 0;
+
+			let pos = game.getPlayer().getPos();
+			if (isEndGame) pos = pos.addPoint(this.getOffset());
+			const vectorToPlayer = pos.addPoint(this.realPos.scalar(-1));
+			const distToPlayer = vectorToPlayer.magnitude();
+			let followDistance = 12 + (this.index - 1) * 24;
+			let followSpeed = 0.003;
+			if (isEndGame) {
+				followDistance = 0;
+				followSpeed = 0.01;
+			}
+			if (distToPlayer > followDistance) {
+				const newPos = this.realPos.addPoint(vectorToPlayer.scalar((distToPlayer - followDistance) * followSpeed));
+				this.realPos = newPos;
+				this.setX(Math.round(newPos.x));
+				this.setY(Math.round(newPos.y));
+			}
+		}
+		super.updatePhysicsPos();
+	}
+
+	getOffset() {
+		if (this.index == 1) {
+			return Vector({x: -3, y: -32});
+		}
+
+		if (this.index == 2) {
+			return Vector({x: -32 - 3, y: -24});
+		}
+
+		if (this.index == 3) {
+			return Vector({x: 32 - 3, y: -24});
+		}
 	}
 }
 
@@ -4932,12 +5003,12 @@ let keys = {
 	"KeyQ": 0,
 
 	// //Debug keys
-	// "KeyO": 0, //fly
-	// "KeyH": 0, //jump
-	// "KeyJ": 0,
-	// "KeyK": 0,
-	// "KeyL": 0,
-	// "KeyI": 0,
+	"KeyO": 0, //fly
+	"KeyH": 0, //jump
+	"KeyJ": 0,
+	"KeyK": 0,
+	"KeyL": 0,
+	"KeyI": 0,
 
 
 	// "KeyP" : 0,
