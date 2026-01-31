@@ -537,6 +537,9 @@ const Vector = ({x, y}) => ({
 	},
 	magnitude() {
 		return Math.sqrt(this.x * this.x + this.y * this.y);
+	},
+	trunc() {
+		return Vector({x: Math.trunc(this.x), y: Math.trunc(this.y)});
 	}
 });
 
@@ -761,6 +764,13 @@ class Rectangle {
 		this.pos.y += dy;
 	}
 
+	containsPoint(p) {
+		return this.getX() <= p.x
+			&& this.getY() <= p.y
+			&& this.getX() + this.width >= p.x
+			&& this.getY() + this.height >= p.y;
+	}
+
 	isOverlap(rectangle) {
 		let x = this.getX();
 		let y = this.getY();
@@ -862,6 +872,8 @@ class Hitbox {
 	cloneOffset(v) {
 		return new Hitbox(this.getX() + v.x, this.getY() + v.y, this.rect.width, this.rect.height);
 	}
+
+	containsPoint(p) {return this.rect.containsPoint(p);}
 }
 
 function vToRad(v) {
@@ -1419,7 +1431,7 @@ class Game {
 
 		this.unlockScreen = new UnlockScreen(this);
 		this.unlocks = {
-			JUMP: false,
+			JUMP: true,
 			SLIDE: false,
 			DJ: false,
 		}
@@ -1427,6 +1439,11 @@ class Game {
 		this.getCurrentLevel().resetStage();
 
 		audioCon.playAmbiance(CAVE_AMBIANCE);
+
+		this.mask = new TwoEyeMask();
+
+		this.mousePositions = [];
+		this.maxMousePositions = 10;
 	}
 
 	getCurrentLevel() {
@@ -1466,6 +1483,8 @@ class Game {
 		if (optionsCon.showing) {
 			optionsCon.draw();
 		}
+
+		this.mask.draw();
 	}
 
 	getMaxNumDiamonds() {
@@ -1536,11 +1555,14 @@ class Game {
 	}
 
 	setKeys(keys) {
+		if (!this.prevMouse && gMouseHeld) this.mouseDown();
+		this.prevMouse = gMouseHeld;
+
 		keys["moveLeft"] = keys["ArrowLeft"] || keys["KeyA"];
 		keys["moveRight"] = keys["ArrowRight"] || keys["KeyD"];
-		keys["jump"] = keys["KeyZ"] || keys["KeyN"];
+		keys["jump"] = keys["ArrowUp"] || keys["KeyW"];
 		keys["slide"] = keys["KeyX"] || keys["KeyM"];
-
+		
 		if (keys["ArrowLeft"] || keys["ArrowRight"]) this.controlScheme = 0;
 		if (keys["KeyA"] || keys["KeyD"]) this.controlScheme = 1;
 
@@ -1558,7 +1580,7 @@ class Game {
 				this.unlocks.DJ = !this.unlocks.DJ;
 			}
 			if (keys["KeyI"] && !this.prevI) {
-				this.getCurrentLevel().onButtonPush();
+				this.mask.toggle();
 			}
 
 			if (this.startTime < 1  && (keys["moveLeft"] || keys["moveRight"])) this.startTime = window.performance.now();
@@ -1608,13 +1630,20 @@ class Game {
 		// this.animFrame = (this.animFrame+1)%60;
 		this.animTime += timeDelta;
 		let i = 0;
+
 		while (this.animTime >= 16.666) {
 			this.animFrame = (this.animFrame + 1) % 60;
 			this.animTime -= 16.666;
 			i++;
+			
+			this.mousePositions.push(gMousePos);
+			if (this.mousePositions.length > this.maxMousePositions)
+				this.mousePositions.shift();
+			
 			if (!optionsCon.showing) {
 
 				this.getCurrentLevel().updatePhysicsAllPos();
+				this.mask.update();
 				if (this.levelInd != -1) this.diamonds.forEach(d => d.updatePhysicsPos());
 				if (this.screenShakeFrames > 0) {
 					this.shakeScreen();
@@ -1843,16 +1872,20 @@ class Game {
 		this.diamonds.push(d);
 		return this.diamonds.length;
 	}
+
+	mouseDown() {
+		this.getCurrentLevel().mouseDown();
+	}
 }
 
 const keyNames = [
 	{
-		"jump": "Z",
+		"jump": "Up",
 		"slide": "X",
 		"restart": "R",
 		"map": "C"
 	}, {
-		"jump": "N",
+		"jump": "W",
 		"slide": "M",
 		"restart": "R",
 		"map": "C"
@@ -2334,6 +2367,14 @@ class Level {
 			curTileMapInd += 1;
 		}
 
+		this.mouseables = [];
+		const ang = new Angel(game, 64, 94, this);
+		const ang2 = new Angel(game, 8, 94, this);
+		
+		this.actors.push(ang);
+		this.actors.push(ang2);
+		this.mouseables.push(ang);
+
 		this.location = Vector({x: locationX, y: locationY});
 		this.endLevelFrames = 0;
 		this.opacity = 0;
@@ -2471,6 +2512,10 @@ class Level {
 		const x = -5;
 		const direction = 1;
 		this.pushDecoration(new Bat(x, y, direction, this));
+	}
+	
+	mouseDown() {
+		this.mouseables.forEach(x => x.mouseDown(gMousePos));
 	}
 
 	spawnDrop() {
@@ -2818,6 +2863,7 @@ class Level {
 		this.hintText = true;
 	}
 }
+
 
 /*class StartScreen extends Level{
     constructor(tileArr, game) {
@@ -3605,6 +3651,7 @@ class Actor extends PhysObj {
 		this.origW = w;
 		this.origH = h;
 		this.subpixelX = 0;
+		this.subpixelY = 0;
 	}
 
 	respawnClone() {
@@ -3636,7 +3683,8 @@ class Actor extends PhysObj {
 	}
 
 	moveY(amount, onCollide) {
-		let remainder = Math.round(amount);
+		let remainder = Math.round(amount + this.subpixelY);
+		this.subpixelY = (amount + this.subpixelY) - remainder;
 		const direction = Vector({y: amount < 0 ? -1 : 1, x: 0});
 		if (remainder !== 0) {
 			const carryingObj = this.getCarrying();
@@ -3927,6 +3975,320 @@ class PlayerKill extends Solid {
 			return false;
 		}
 		return true;
+	}
+}
+
+class Mask {
+	constructor() {
+		this.x = 64;
+		this.y = 64;
+
+		this.innerRad = 32;
+		this.outerRad = 64;
+
+		this.on = true;
+	}
+
+	update() {
+		var mousePos = gMousePos;
+		this.x = mousePos.x;
+		this.y = mousePos.y;
+	}
+
+	draw() {
+		if (!this.on) return;
+
+		const gradient = CTX.createRadialGradient(
+			this.x, this.y, this.innerRad, this.x, this.y, this.outerRad
+		);
+
+		// Add three color stops
+		gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
+		gradient.addColorStop(0.9, "rgba(0, 0, 0, 1)");
+		gradient.addColorStop(1, "black");
+
+		// Set the fill style and draw a rectangle
+		CTX.fillStyle = gradient;
+		CTX.fillRect(0, 0, PIXEL_GAME_SIZE[0], PIXEL_GAME_SIZE[1]);
+	}
+
+	toggle() {
+		this.on = !this.on;
+	}
+
+	isLookingAt(hitbox) {
+		//get distance from mouse pos to center
+		// return under threshold or not
+
+		const x = hitbox.getX();
+		const y = hitbox.getY();
+
+		const px = x + hitbox.getWidth() / 2;
+		const py = y + hitbox.getHeight() / 2;
+				
+		const dist = Math.sqrt((this.x - px) ** 2 + (this.y - py) ** 2);
+		return dist < this.outerRad;
+	}
+}
+
+class TwoEyeMask extends Mask {
+	constructor() {
+		super();
+		this.yscale = 0.5;
+		this.innerRad = 24;
+		this.outerRad = 36;
+
+		this.eyeDistance = 80;
+	}
+
+	draw() {
+		const leftGrad = CTX.createRadialGradient(
+			this.x, this.y / this.yscale, this.innerRad, this.x, this.y / this.yscale, this.outerRad
+		);
+		const rightGrad = CTX.createRadialGradient(
+			this.x + this.eyeDistance, this.y / this.yscale, this.innerRad, this.x + this.eyeDistance, this.y / this.yscale, this.outerRad
+		);
+
+		// Add three color stops
+		leftGrad.addColorStop(0, "rgba(0, 0, 0, 0)");
+		leftGrad.addColorStop(0.9, "rgba(0, 0, 0, 1)");
+		leftGrad.addColorStop(1, this.on ? "black" : "rgba(0,0,0,0)");
+		
+		rightGrad.addColorStop(0, "rgba(0, 0, 0, 0)");
+		rightGrad.addColorStop(0.9, "rgba(0, 0, 0, 1)");
+		rightGrad.addColorStop(1, this.on ? "black" : "rgba(0,0,0,0)");
+		
+		// Set the fill style and draw a rectangle
+		CTX.setTransform(1, 0, 0, this.yscale, 0, 0);
+		
+		CTX.fillStyle = leftGrad;
+		CTX.fillRect(0, 0, this.x + this.outerRad + 1, PIXEL_GAME_SIZE[1] / this.yscale);
+		CTX.fillStyle = rightGrad;
+		CTX.fillRect(this.x + this.outerRad, 0, PIXEL_GAME_SIZE[0] * 2, PIXEL_GAME_SIZE[1] / this.yscale);
+		CTX.setTransform(1, 0, 0, 1, 0, 0);
+
+	}
+
+	isLookingAt(hitbox) {
+		//get distance from mouse pos to center
+		// return under threshold or not
+
+		const x = hitbox.getX();
+		const y = hitbox.getY();
+
+		const px = x + hitbox.getWidth() / 2;
+		const py = y + hitbox.getHeight() / 2;
+
+
+		const margin = 8;
+		const rx = this.outerRad + margin;
+		const ry = (this.outerRad + margin) * this.yscale;
+
+		return pointInEllispe(px, py, this.x, this.y, rx, ry)
+			|| pointInEllispe(px, py, this.x + this.eyeDistance, this.y, rx, ry);
+	}
+}
+
+function pointInEllispe(px, py, ex, ey, rx, ry) {
+	const a = (px - ex) ** 2 / rx ** 2;
+	const b = (py - ey) ** 2 / ry ** 2;
+
+	return (a + b) <= 1;
+}
+
+class Angel extends Actor {
+	constructor(game, x, y, level) {
+		super(x, y, 8, 10, true, level);
+		this.game = game;
+		this.origX = x;
+		this.origY = y;
+
+		this.level = level;
+
+		this.isSeen = false;
+
+		this.onCollide = this.onCollide.bind(this);
+		this.squish = this.squish.bind(this);
+		this.mouseDown = this.mouseDown.bind(this);
+		this.posess = this.posess.bind(this);
+
+
+		this.walkDirection = 0;
+		this.walkSpeed = 0.3;
+
+		this.posessed = false;
+	}
+
+	posess() {
+		this.posessed = true;
+		this.walkDirection = 0;
+	}
+
+	dePosess() {
+		this.posessed = false;
+		
+		//Average previous mouse positions
+		const mousePositions = this.getGame().mousePositions;
+		let avg = Vector({x: 0, y: 0});
+		for (let i = 0; i < mousePositions.length - 1; ++i) {
+			const curP = mousePositions[i];
+			const nextP = mousePositions[i + 1];
+			const difference = nextP.addPoint(curP.scalar(-1));
+			avg = avg.addPoint(difference);
+		}
+		avg = avg.scalar(1 / mousePositions.length);
+		if (avg.magnitude() < 0.01) {
+			avg = VectorZero;
+		} else {
+			const maxSpeed = 2;
+			avg = avg.scalar(Math.min(avg.magnitude(), maxSpeed) / avg.magnitude());
+		}
+		this.setVelocity(avg);
+	}
+
+	mouseDown(mousePos) {
+		// if (this.getHitbox().containsPoint(mousePos)) {
+		// 	this.posess();
+		// }
+		//todo: not working for somereason
+	}
+
+	draw() {
+		// if (this.isSeen)
+			super.draw();
+	}
+
+	onPlayerCollide() {
+		if (this.isSeen) return "wall throwable";
+		else return "kill";
+	}
+
+	shouldKill(p) {
+		return !this.isSeen;
+	}
+
+	respawnClone() {
+		return new Angel(this.game, this.origX, this.origY, this.level);
+	}
+
+	onCollide(physObj) {
+		const playerCollideFunction = physObj.onPlayerCollide();
+		if (!this.isSeen && playerCollideFunction === "") {
+			this.getLevel().killPlayer();
+		}
+		if (playerCollideFunction === "spring") {
+			physObj.bounceObj(this);
+			// this.touchedIce = true;
+		} else if ((playerCollideFunction.includes("wall") || playerCollideFunction === "") && physObj.collidable) {
+			if (physObj.isOnTopOf(this)) {
+				if (playerCollideFunction.includes("throwable")) {
+					physObj.move(0, -1);
+					return false;
+				} else {
+					this.setYVelocity(0);
+				}
+			} else if (this.isOnTopOf(physObj)) {
+				//Land on ground
+				this.setYVelocity(0);
+				// if (!this.isOnIce() && this.throwHeight > this.getHeight() + 24) {
+				// 	this.setXVelocity(physObj.getXVelocity());
+				// }
+			} else if (this.isLeftOf(physObj) || this.isRightOf(physObj)) {
+				this.walkDirection *= -1;
+				// if (this.getYVelocity() >= 0) this.setYVelocity(-0.5);
+				if (playerCollideFunction === "wall") {
+					this.getLevel().pushDustSprite(new GroundDustSprite(this.getX(), this.getY() - 3, 0, this.level, this.velocity.x < 0 ? VectorRight : VectorLeft))
+				}
+				this.setXVelocity(0);
+			}
+		} else if (playerCollideFunction === "kill") {
+			return false;
+		} else if (playerCollideFunction.includes("button")) {
+			physObj.push();
+			return playerCollideFunction.includes("wall");
+		}
+		return true;
+	}
+
+	fall() {
+		this.setYVelocity(Math.min(MAXFALL, this.velocity.y + (this.velocity.y > 0 ? PLAYER_GRAVITY_UP : PLAYER_GRAVITY_DOWN)));
+	}
+
+	updatePhysicsPos() {
+		if (this.getLevel().getPlayer().deathFrames !== 0) return;
+		
+		// if (this.posessed && !gMouseHeld) {
+		// 	console.log("stop");
+		// 	this.posessed = false;
+		// }
+		if (!this.prevMouse && gMouseHeld) {
+			if (this.getHitbox().containsPoint(gMousePos)) {
+				this.posess();
+			}
+		} else if (this.posessed && !gMouseHeld) {
+			this.dePosess();
+		}
+		this.prevMouse = gMouseHeld;
+		if (this.getX() + this.getWidth() >= PIXEL_GAME_SIZE[0]) {
+			if (this.walkDirection > 0) this.walkDirection = -1;
+			this.setXVelocity(0);
+			this.setX(PIXEL_GAME_SIZE[0] - this.getWidth())
+		} else if (this.getX() <= 0) {
+			if(this.walkDirection < 0) this.walkDirection = 1;
+			this.setXVelocity(0);
+			this.setX(0);
+		}
+
+		if (this.posessed) {
+			const mousePos = gMousePos.trunc();
+			let v = mousePos.addPoint(this.getPos().scalar(-1));
+			v = v.addPoint(Vector({x: this.getWidth(), y: this.getHeight()}).scalar(-0.5));
+			if (v.magnitude() == 0) return;
+
+			let speed = 2;
+			if (v.magnitude() < 10) {
+				speed = 1;
+			}
+
+			v = v.scalar(1 / v.magnitude() * speed);
+
+			this.setVelocity(v);
+			super.updatePhysicsPos();
+			return;
+		}
+
+		if (this.walkDirection === 0) {
+			this.walkDirection = -Math.sign(this.getX() - this.level.getPlayer().getX());
+		}
+
+		const mask = this.game.mask;
+		this.isSeen = mask.isLookingAt(this.getHitbox());
+		
+		if (!this.isSeen) {
+			this.setXVelocity(this.walkDirection * this.walkSpeed);
+		} else {
+			// this.setXVelocity(0);
+			if (!this.isOnGround()) {
+				this.fall();
+				// if (this.getY() > this.throwHeight + 5 && !this.touchedIce) {
+				// 	this.velocity.x = 0;
+				// }
+			} else {
+				// this.setYVelocity(this.isOnGround().getYVelocity() * 0.9);
+				this.setXVelocity(this.getXVelocity() * 0.85);
+			}
+		}
+		
+		// if (this.getSprite().update) this.getSprite().update();
+		super.updatePhysicsPos();
+	}
+
+	isOnGround() {
+		if (this.isOnTopOf(super.getLevel().getPlayer())) {
+			return super.getLevel().getPlayer()
+		} else {
+			return super.isOnGround();
+		}
 	}
 }
 
@@ -4352,12 +4714,13 @@ class Player extends Actor {
 		} else if (playerCollideFunction.includes("wall") && physObj.collidable) {
 			if (physObj.collidable && physObj.isOnTopOf(this) || (this.carrying && physObj.isOnTopOf(this.carrying))) {
 				if (playerCollideFunction.includes("throwable")) {
+					//todo
 					if (playerCollideFunction.includes("sticky") && physObj.stuck) {
 						this.setYVelocity(0);
 						physObj.setYVelocity(0);
 						return true;
 					} else if (!physObj.isOnGround()) {
-						physObj.moveY(-1, physObj.onCollide);
+						// physObj.moveY(-1, physObj.onCollide);
 					}
 				} else {
 					this.setYVelocity(0);
@@ -5003,12 +5366,13 @@ let keys = {
 	"KeyQ": 0,
 
 	// //Debug keys
-	// "KeyO": 0, //fly
-	// "KeyH": 0, //jump
-	// "KeyJ": 0,
-	// "KeyK": 0,
-	// "KeyL": 0,
-	// "KeyI": 0,
+	"KeyO": 0, //fly
+	"KeyH": 0, //jump
+	"KeyJ": 0,
+	"KeyK": 0,
+	"KeyL": 0,
+	"KeyI": 0,//turn off mask
+	"KeyQ": 0, 
 
 
 	// "KeyP" : 0,
@@ -5020,8 +5384,8 @@ let keys = {
 	"KeyA": 0,
 	"KeyS": 0,
 	"KeyD": 0,
-	"KeyN": 0,
-	"KeyM": 0,
+	// "KeyN": 0,
+	// "KeyM": 0,
 };
 
 let diagnosticFrameCount = 0;
@@ -5102,6 +5466,32 @@ function keyUpHandler(event) {
 	}
 }
 
+function getMousePos(evt) {
+	var rect = canvas.getBoundingClientRect(), // abs. size of element
+		scaleX = canvas.width / rect.width,    // relationship bitmap vs. element for x
+		scaleY = canvas.height / rect.height;  // relationship bitmap vs. element for y
+	return Vector({
+		x: (evt.clientX - rect.left) * scaleX,   // scale mouse coordinates after they have
+		y: (evt.clientY - rect.top) * scaleY     // been adjusted to be relative to element
+	});
+}
+
 canvas.ondblclick = () => {
 	toggleFullscreen();
 };
+
+let gMousePos = Vector({x: 0, y: 0});
+
+document.body.onmousemove = (evt) => {
+	gMousePos = getMousePos(evt);
+}
+
+let gMouseHeld = false;
+
+document.body.onmousedown = (evt) => {
+	gMouseHeld = true;
+}
+
+document.body.onmouseup = (evt) => {
+	gMouseHeld = false;
+}

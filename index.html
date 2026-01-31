@@ -5,7 +5,6 @@
     <title>Ascend</title>
 </head>
 <body id="body">
-
 </body>
 
 <img style="display: none" src="images/Spikes3.png" alt="" id="spikes-img">
@@ -55,6 +54,7 @@
 <img style="display: none" src="images/SpecialMap.png" alt="" id="special-map">
 
 <img style="display: none" src="images/formal-complaint.gif" id="formal-complaint">
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.0/howler.core.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jimp/0.16.1/jimp.js"></script>
 
@@ -71,7 +71,13 @@
         background-color: black;
         background-size: 512px;
     }
-    body {background: black; margin:0; height:100%; display: flex; justify-content: center; align-items: center;}
+    body {
+        /* background: black; */
+        image-rendering: pixelated;
+        background-image: url('./wavebg (copy).gif');
+        background-repeat: no-repeat;
+        background-size: cover;
+        margin:0; height:100%; display: flex; justify-content: center; align-items: center;}
     html {height:100%; overflow: hidden;}
 </style>
 </html>
