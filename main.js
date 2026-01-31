@@ -2,6 +2,10 @@
 // (You can also find the repo at https://github.com/alexander-i-yang/minigame)
 // From Yam (the Dev)
 const canvas = document.createElement("canvas");
+const bufferCanvas = document.createElement("canvas");
+const torchBufferCanvas = document.createElement("canvas");
+
+torchBufferCanvas.style = "width: 128px; height: 128px;"
 
 import {
 	getLevelData,
@@ -12,10 +16,22 @@ import {
 } from './levelEditor.js';
 
 const PIXEL_GAME_SIZE = [128, 128];
+
 canvas.width = PIXEL_GAME_SIZE[0];
 canvas.height = PIXEL_GAME_SIZE[1];
+bufferCanvas.width = PIXEL_GAME_SIZE[0];
+bufferCanvas.height = PIXEL_GAME_SIZE[1];
+torchBufferCanvas.width = PIXEL_GAME_SIZE[0];
+torchBufferCanvas.height = PIXEL_GAME_SIZE[1];
+
 document.body.insertBefore(canvas, document.body.childNodes[0]);
-const CTX = canvas.getContext("2d");
+// document.body.insertBefore(bufferCanvas, document.body.childNodes[0]);
+// document.body.insertBefore(torchBufferCanvas, document.body.childNodes[0]);
+let currentCTX = canvas.getContext("2d");
+const MAIN_CTX = currentCTX;
+const BUFFER_CTX = bufferCanvas.getContext("2d");
+const TORCH_BUFFER_CTX = torchBufferCanvas.getContext("2d");
+
 const PLAYER_GRAVITY_UP = 0.20;
 const PLAYER_GRAVITY_DOWN = 0.12;
 const PLAYER_JUMP_V = -2.5;
@@ -31,6 +47,8 @@ const SEMISOLID_TILESHEET = document.getElementById("semisolid-tilesheet");
 const BUTTON = document.getElementById("button");
 const BIG_BUTTON = document.getElementById("big-button");
 const BLOCK = document.getElementById("block-sprite");
+const ANGEL_SPRITE = document.getElementById("angel");
+const ANGEL_WALK_SPRITESHEET = document.getElementById("angel-walk");
 
 const ICE_TILESHEET = document.getElementById("ice-tilesheet");
 const ICE_TILESHEET_OUTER = document.getElementById("ice-tilesheet-2");
@@ -76,6 +94,8 @@ const POWERUP_SLIDE_SPRITE = document.getElementById("powerup-slide");
 const POWERUP_DJ_SPRITE = document.getElementById("powerup-dj");
 
 const SPECIAL_MAP = document.getElementById("special-map");
+
+const BG_SPRITE = document.getElementById("bg-sprite");
 
 let game;
 
@@ -494,7 +514,7 @@ function writeText(txt, size, pos, color, spacing) {
 		}
 	}
 	spacing = spacing ? spacing : 0;
-	CTX.fillStyle = color ? color : 'black';
+	currentCTX.fillStyle = color ? color : 'black';
 	let currX = pos.x;
 	for (let i = 0; i < needed.length; i++) {
 		const letter = needed[i];
@@ -504,7 +524,7 @@ function writeText(txt, size, pos, color, spacing) {
 			let row = letter[y];
 			for (let x = 0; x < row.length; x++) {
 				if (row[x]) {
-					CTX.fillRect(currX + x * size + game.cameraOffset.x, currY + game.cameraOffset.y, size, size);
+					currentCTX.fillRect(currX + x * size + game.cameraOffset.x, currY + game.cameraOffset.y, size, size);
 				}
 			}
 			addX = Math.max(addX, row.length * size);
@@ -515,8 +535,8 @@ function writeText(txt, size, pos, color, spacing) {
 }
 
 function drawPixel(x, y, color) {
-	CTX.fillStyle = color ? color : 'black';
-	CTX.fillRect(x + game.cameraOffset.x, y + game.cameraOffset.y, 1, 1);
+	currentCTX.fillStyle = color ? color : 'black';
+	currentCTX.fillRect(x + game.cameraOffset.x, y + game.cameraOffset.y, 1, 1);
 }
 
 const Vector = ({x, y}) => ({
@@ -900,15 +920,15 @@ class Sprite {
 
 	drawSelf(x, y) {
 		const d = () => {
-			CTX.drawImage(this.img, x, y);
+			currentCTX.drawImage(this.img, x, y);
 		};
 		if (this.flip) {
-			CTX.save();
-			CTX.translate(x + TILE_SIZE, 0);
-			CTX.scale(-1, 1);
-			CTX.translate(-x, 0);
+			currentCTX.save();
+			currentCTX.translate(x + TILE_SIZE, 0);
+			currentCTX.scale(-1, 1);
+			currentCTX.translate(-x, 0);
 			d();
-			CTX.restore();
+			currentCTX.restore();
 		} else {
 			d();
 		}
@@ -921,9 +941,9 @@ class Sprite {
 	draw(x, y) {
 		if (this.direction) {
 			const rad = vToRad(this.direction);
-			CTX.save();
-			CTX.translate(x + game.cameraOffset.x, y + game.cameraOffset.y);
-			CTX.rotate(rad);
+			currentCTX.save();
+			currentCTX.translate(x + game.cameraOffset.x, y + game.cameraOffset.y);
+			currentCTX.rotate(rad);
 			let uberOffset = Vector({x: 0, y: 0});
 			switch (this.direction) {
 				case VectorUp:
@@ -941,9 +961,9 @@ class Sprite {
 					break;
 			}
 
-			CTX.translate(-x + uberOffset.x, -y + uberOffset.y);
+			currentCTX.translate(-x + uberOffset.x, -y + uberOffset.y);
 			this.drawSelf(x, y);
-			CTX.restore();
+			currentCTX.restore();
 		} else {
 			this.drawSelf(x + game.cameraOffset.x, y + game.cameraOffset.y);
 		}
@@ -963,7 +983,7 @@ function hexToRgb(hex) {
 }
 
 function recolorImage(x, y, oldRGB, newRGB) {
-	const imageData = CTX.getImageData(x, y, TILE_SIZE, TILE_SIZE);
+	const imageData = currentCTX.getImageData(x, y, TILE_SIZE, TILE_SIZE);
 	const len = imageData.data.length;
 	for (let i = 0; i < len; i += 4) {
 		if (imageData.data[i + 1] === oldRGB[1]
@@ -978,7 +998,7 @@ function recolorImage(x, y, oldRGB, newRGB) {
 		}
 
 	}
-	CTX.putImageData(imageData, x, y);
+	currentCTX.putImageData(imageData, x, y);
 }
 
 class TileSprite extends Sprite {
@@ -994,7 +1014,7 @@ class TileSprite extends Sprite {
 		 *  see https://stackoverflow.com/questions/5623838/rgb-to-hex-and-hex-to-rgb
 		 *  Try putting the image back and then referencing it
 		 */
-		CTX.drawImage(this.img, this.v.x * TILE_SIZE, this.v.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, x, y, TILE_SIZE, TILE_SIZE);
+		currentCTX.drawImage(this.img, this.v.x * TILE_SIZE, this.v.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, x, y, TILE_SIZE, TILE_SIZE);
 		if (this.replaceColor) {
 			recolorImage(x, y, this.replaceColor, this.fillColor);
 		}
@@ -1017,15 +1037,15 @@ class AnimatedSprite extends Sprite {
 	drawSelf(x, y) {
 		const xOffset = (this.offsetFrames + this.curCol) * this.w;
 		const d = () => {
-			CTX.drawImage(super.getImage(), xOffset, 0, this.w, this.h, x, y, this.w, this.h);
+			currentCTX.drawImage(super.getImage(), xOffset, 0, this.w, this.h, x, y, this.w, this.h);
 		};
 		if (this.flip) {
-			CTX.save();
-			CTX.translate(x + TILE_SIZE, 0);
-			CTX.scale(-1, 1);
-			CTX.translate(-x, 0);
+			currentCTX.save();
+			currentCTX.translate(x + TILE_SIZE, 0);
+			currentCTX.scale(-1, 1);
+			currentCTX.translate(-x, 0);
 			d();
-			CTX.restore();
+			currentCTX.restore();
 		} else {
 			d();
 		}
@@ -1075,6 +1095,7 @@ class AnimatedSprite extends Sprite {
 					this.curCol = (this.curCol + 1) % maxFrames;
 				}
 			}
+			console.log(continueAnim);
 			if (this.curCol === ((data.reverse || this.continue === 2) ? maxFrames : 0)) {
 
 				if (data.onComplete == null) {
@@ -1097,8 +1118,8 @@ class AnimatedSprite extends Sprite {
 }
 
 function drawOnCanvas(rect, color) {
-	CTX.fillStyle = color ? color : "#29ADFF";
-	CTX.fillRect(rect.getX() + game.cameraOffset.x, rect.getY() + game.cameraOffset.y, rect.width, rect.height);
+	currentCTX.fillStyle = color ? color : "#29ADFF";
+	currentCTX.fillRect(rect.getX() + game.cameraOffset.x, rect.getY() + game.cameraOffset.y, rect.width, rect.height);
 }
 
 function clearCanvas() {
@@ -1376,6 +1397,11 @@ function play() {
 	}
 }
 
+function onCoinPush() {
+	game.coins++;
+	console.log(game.coins);
+}
+
 class Game {
 	constructor(levelData) {
 		this.levels = [];
@@ -1386,6 +1412,8 @@ class Game {
 		this.lastSliding = false;
 		this.canDoubleJump = false;
 		this.diamonds = [];
+
+		this.coins = 0;
 
 		this.map = new WorldMap(this);
 		this.numLevels = levelData.numLevels;
@@ -1409,7 +1437,7 @@ class Game {
 
 		this.oobScreen = new OOBScreen();
 
-		this.levelInd = 12;
+		this.levelInd = 8;
 		this.visitedLevels[this.levelInd] = true;
 
 		this.cameraOffset = Vector({x: 0, y: 0});
@@ -1444,6 +1472,8 @@ class Game {
 
 		this.mousePositions = [];
 		this.maxMousePositions = 10;
+
+		this.bg = new Sprite(BG_SPRITE);
 	}
 
 	getCurrentLevel() {
@@ -1452,39 +1482,85 @@ class Game {
 	}
 
 	drawCurrentLevel() {
-		this.getCurrentLevel().drawAll();
-		this.unlockScreen.draw();
+		const draw = () => {
+			this.bg.draw(0, 0);
 
-		if (this.scoreboardFrames > 0) {
-			this.drawScoreboard();
-		}
-		if (this.levelInd != -1) this.diamonds.forEach(d => d.draw());
-		if (this.showMap) this.map.draw();
-		if (this.animFrame % 60 === 0) {
-			this.secondsUntilBat -= 1;
-		}
-		this.framesUntilDrop--;
-		if (this.secondsUntilBat < 0) {
-			this.getCurrentLevel().spawnBat();
-			this.secondsUntilBat = Math.round(Math.random() * 10 + 5);
-		}
-		if (this.framesUntilDrop < 0) {
-			this.getCurrentLevel().spawnDrop();
-			this.framesUntilDrop = Math.round(Math.random() * 45 + 15);
-		}
-		if (this.emptySquareData.x !== -1) {
-			this.drawEmptySquareAround(
-				this.emptySquareData.x,
-				this.emptySquareData.y,
-				this.emptySquareData.rad,
-				this.emptySquareData.color,
-			)
-		}
-		if (optionsCon.showing) {
-			optionsCon.draw();
+			this.getCurrentLevel().drawAll();
+			this.unlockScreen.draw();
+
+			if (this.scoreboardFrames > 0) {
+				this.drawScoreboard();
+			}
+			if (this.levelInd != -1) this.diamonds.forEach(d => d.draw());
+			if (this.showMap) this.map.draw();
+			if (this.animFrame % 60 === 0) {
+				this.secondsUntilBat -= 1;
+			}
+			this.framesUntilDrop--;
+			if (this.secondsUntilBat < 0) {
+				this.getCurrentLevel().spawnBat();
+				this.secondsUntilBat = Math.round(Math.random() * 10 + 5);
+			}
+			if (this.framesUntilDrop < 0) {
+				this.getCurrentLevel().spawnDrop();
+				this.framesUntilDrop = Math.round(Math.random() * 45 + 15);
+			}
+			if (this.emptySquareData.x !== -1) {
+				this.drawEmptySquareAround(
+					this.emptySquareData.x,
+					this.emptySquareData.y,
+					this.emptySquareData.rad,
+					this.emptySquareData.color,
+				)
+			}
+			if (optionsCon.showing) {
+				optionsCon.draw();
+			}
 		}
 
+		currentCTX = TORCH_BUFFER_CTX;
+		currentCTX.reset();
+		this.getCurrentLevel().torches.forEach(t => t.drawLight());
+		this.getCurrentLevel().getPlayer().drawLight();
+
+		currentCTX = BUFFER_CTX;
+		currentCTX.reset();
+		currentCTX.globalCompositeOperation = "source-over";
+		this.getCurrentLevel().getPlayer().draw();
+		this.getCurrentLevel().torches.forEach(t => t.draw());
+		this.getCurrentLevel().drawPhysics();
+		currentCTX.globalCompositeOperation = "source-in";
+		currentCTX.drawImage(torchBufferCanvas, 0, 0);
+		currentCTX = MAIN_CTX;
+
+		currentCTX.globalCompositeOperation = "source-over";
 		this.mask.draw();
+
+		currentCTX.globalCompositeOperation = "source-atop";
+		draw();
+
+		currentCTX.globalCompositeOperation = "destination-over";
+		
+		currentCTX.drawImage(bufferCanvas, 0, 0);
+
+		currentCTX.fillStyle = "black";
+		currentCTX.rect(0, 0, PIXEL_GAME_SIZE[0], PIXEL_GAME_SIZE[1]);
+		currentCTX.fill();
+
+		return;
+		currentCTX.globalCompositeOperation = "source-atop";
+
+		
+		draw();
+		// CTX.globalCompositeOperation = "source-out";
+		// draw();
+		// CTX.fillStyle = "red";
+		// CTX.globalCompositeOperation = "source-atop";
+		// drawEllipse(12, 12, 100, "red");
+		// this.mask.drawOther();
+		// draw();
+
+		
 	}
 
 	getMaxNumDiamonds() {
@@ -1547,7 +1623,7 @@ class Game {
 			x: this.scoreboardRect.getX() + 2,
 			y: this.scoreboardRect.getY() + 2
 		}), this.cheated ? "#FF004D" : "#FFF1E8");
-		CTX.drawImage(SKULL_IMG, this.scoreboardRect.getX() + 1 + this.cameraOffset.x, this.scoreboardRect.getY() + 10 + this.cameraOffset.y);
+		currentCTX.drawImage(SKULL_IMG, this.scoreboardRect.getX() + 1 + this.cameraOffset.x, this.scoreboardRect.getY() + 10 + this.cameraOffset.y);
 		writeText(this.deaths.toString(), 1, Vector({
 			x: this.scoreboardRect.getX() + 10,
 			y: this.scoreboardRect.getY() + 11
@@ -2127,7 +2203,7 @@ class MapSec {
 		if (this.level.myLevelInd === undefined) return;
 		if (this.level.myLevelInd === 2) {
 			if (!this.hasVisited()) {
-				CTX.drawImage(SPECIAL_MAP, offsetX, offsetY);
+				currentCTX.drawImage(SPECIAL_MAP, offsetX, offsetY);
 				return;
 			}
 		}
@@ -2163,6 +2239,7 @@ class Level {
 		this.solids = [];
 		this.actors = [];
 		this.decorations = [];
+		this.torches = [];
 		this.frontDecorations = [];
 		this.dustSprites = [];
 		this.myLevelInd = levelInd;
@@ -2243,7 +2320,9 @@ class Level {
 							case 61:
 								centerTile = true;
 							case 62:
-								this.decorations.push(new Torch(gameSpaceX, gameSpaceY, this, centerTile));
+								const torch = new Torch(gameSpaceX, gameSpaceY, this, centerTile, () => {});
+								this.torches.push(torch);
+								this.solids.push(torch);
 								break;
 							case 63:
 								this.frontDecorations.push(new GodRay(gameSpaceX, gameSpaceY, this));
@@ -2347,6 +2426,14 @@ class Level {
 						}
 						this.solids.push(new Powerup(x, y, this, onPush, sprite));
 						break;
+					case 22:
+						const ang = new Angel(game, gameSpaceX, gameSpaceY - 2, this);
+						this.actors.push(ang);
+						// this.mouseables.push(ang);
+						break;
+					case 23:
+						const coin = new Coin(gameSpaceX, gameSpaceY, this, onCoinPush);
+						this.solids.push(coin);
 					//Meta
 					case 64:
 						const height = tileCode % 4;
@@ -2368,12 +2455,6 @@ class Level {
 		}
 
 		this.mouseables = [];
-		const ang = new Angel(game, 64, 94, this);
-		const ang2 = new Angel(game, 8, 94, this);
-		
-		this.actors.push(ang);
-		this.actors.push(ang2);
-		this.mouseables.push(ang);
 
 		this.location = Vector({x: locationX, y: locationY});
 		this.endLevelFrames = 0;
@@ -2407,6 +2488,16 @@ class Level {
 
 		this.currentSpawn = Vector({x: x, y: y});
 		//this.currentSpawn = this.spawns[direction];
+	}
+
+	drawPhysics() {
+		this.getSolids().forEach(curItem => {
+			curItem.draw();
+		});
+		this.actors.forEach(item => {
+			item.draw();
+		});
+		this.player.draw();
 	}
 
 	drawAll() {
@@ -2665,7 +2756,11 @@ class Level {
 	isOnGround(actor) {
 		let ret = null;
 		this.getAllGeometry().some(solid => {
-				if ((solid.onPlayerCollide().includes("wall")) && solid.collidable && actor.isOnTopOf(solid)) {
+				if (!actor.isOnTopOf(solid) || !solid.collidable) return false;
+
+				if (solid.onPlayerCollide().includes("kill")) return false;
+
+				if ((solid.onPlayerCollide().includes("wall"))) {
 					ret = solid;
 					return true;
 				}
@@ -2855,8 +2950,8 @@ class Level {
 	}
 
 	drawFade() {
-		CTX.fillStyle = `rgba(0, 0, 0, ${this.opacity})`;
-		CTX.fillRect(-10, -10, canvas.width + 20, canvas.height + 20);
+		currentCTX.fillStyle = `rgba(0, 0, 0, ${this.opacity})`;
+		currentCTX.fillRect(-10, -10, canvas.width + 20, canvas.height + 20);
 	};
 
 	showHintText() {
@@ -3087,8 +3182,8 @@ class OOBScreen {
 	}
 
 	drawAll() {
-		CTX.fill = "black";
-		CTX.fillRect(0, 0, PIXEL_GAME_SIZE[0], PIXEL_GAME_SIZE[1]);
+		currentCTX.fill = "black";
+		currentCTX.fillRect(0, 0, PIXEL_GAME_SIZE[0], PIXEL_GAME_SIZE[1]);
 
 		this.strs.forEach((str, i) => {
 			if (this.ind > this.strLengthSums[i]) {
@@ -3170,7 +3265,7 @@ class EndScreen extends Level {
 		this.player.draw();
 		if (this.throwable) this.throwable.draw();
 
-		CTX.drawImage(TITLE_IMG, 10 + game.cameraOffset.x, 184 + game.cameraOffset.y);
+		currentCTX.drawImage(TITLE_IMG, 10 + game.cameraOffset.x, 184 + game.cameraOffset.y);
 		let textPos = Vector({x: 16, y: 144});
 		CREDITS.map(credit => {
 			textPos.y += credit["paddingY"] ? credit["paddingY"] : 0;
@@ -3326,7 +3421,7 @@ class PhysObj {
 	updatePhysicsPos() {
 		this.move(this.velocity.x, this.velocity.y);
 		if (this.sprite && this.sprite.update) {
-			this.sprite.update();
+			// this.sprite.update();
 		}
 	}
 
@@ -3456,8 +3551,8 @@ class Particle extends Decoration {
 
 		let alpha = (this.frames) * 255 / 120;
 		alpha = Math.ceil(alpha).toString(16).padStart(2, "0");
-		CTX.fillStyle = this.color + alpha;
-		CTX.fillRect(Math.round(this.x), Math.round(this.y), this.size.x, this.size.y);
+		currentCTX.fillStyle = this.color + alpha;
+		currentCTX.fillRect(Math.round(this.x), Math.round(this.y), this.size.x, this.size.y);
 	}
 
 	update() {
@@ -3474,25 +3569,25 @@ class Particle extends Decoration {
 }
 
 function drawEllipse(x, y, rad, colorA, colorB) {
-	const grad=CTX.createRadialGradient(x,y,0,x,y,rad);
+	const grad=currentCTX.createRadialGradient(x,y,0,x,y,rad);
 	grad.addColorStop(0,colorA);
 	grad.addColorStop(1,colorB ? colorB : colorA);
 
-	CTX.fillStyle = grad;
-	CTX.beginPath();
-	CTX.ellipse(x + game.cameraOffset.x, y + game.cameraOffset.y, rad, rad, 0, 0, Math.PI * 2, true);
-	CTX.fill();
+	currentCTX.fillStyle = grad;
+	currentCTX.beginPath();
+	currentCTX.ellipse(x + game.cameraOffset.x, y + game.cameraOffset.y, rad, rad, 0, 0, Math.PI * 2, true);
+	currentCTX.fill();
 }
 
 function drawRoundedRect(x, y, w, h, rad, colorA, colorB) {
-	const grad=CTX.createRadialGradient(x+w/2,y+h/2,0,x+w/2,y+h/2,w);
+	const grad=currentCTX.createRadialGradient(x+w/2,y+h/2,0,x+w/2,y+h/2,w);
 	grad.addColorStop(0,colorA);
 	grad.addColorStop(1,colorB ? colorB : colorA);
 
-	CTX.fillStyle = grad;
-	CTX.beginPath();
-	CTX.roundRect(x + game.cameraOffset.x, y + game.cameraOffset.y, w, h, rad);
-	CTX.fill();
+	currentCTX.fillStyle = grad;
+	currentCTX.beginPath();
+	currentCTX.roundRect(x + game.cameraOffset.x, y + game.cameraOffset.y, w, h, rad);
+	currentCTX.fill();
 }
 
 class Vine extends Decoration {
@@ -3525,31 +3620,6 @@ class GodRay extends Decoration {
 	draw() {
 		// super.draw(this.x, this.y);
 		super.draw(this.x - 16, this.y - 16);
-	}
-}
-
-class Torch extends Decoration {
-	constructor(x, y, level, centerTile) {
-		super(x, y, new AnimatedSprite(
-			FLAME_SPRITESHEET,
-			null,
-			[{frames: 0, onComplete: null}, {frames: 4, onComplete: "loop", nth: 8}]
-		), level);
-		this.sprite.setRow(1);
-		this.timingOffset = Math.random() * 5;
-		this.torchSprite = new Sprite(TORCH_IMG, null);
-		this.offset = centerTile ? 0 : 4;
-	}
-
-	draw() {
-		const offset = Math.sin(Math.PI * game.animFrame / 30 + this.timingOffset) * 0.6;
-		const yOffset = Math.round(Math.sin(Math.PI * game.animFrame / 30) * 0.72);
-		this.torchSprite.draw(this.x + this.offset, this.y + 9 + yOffset);
-
-		// CTX.ellipse(+game.cameraOffset.x+4+this.offset, this.y+game.cameraOffset.y+8, rad, rad, 0, 0, Math.PI*2, true);
-		// drawEllipse(this.x+4+this.offset, this.y+10+yOffset, 10+offset, "rgba(250,198,42,0.1)");
-		drawEllipse(this.x + 4 + this.offset, this.y + 10 + yOffset, 18 + offset, "rgba(41,173,255,0.3)", "rgba(41,173,255,0.0)");
-		this.sprite.draw(this.x + this.offset, this.y + 2 + yOffset);
 	}
 }
 
@@ -3615,8 +3685,8 @@ class SpringDustSprite extends Decoration {
 
 	draw() {
 		const a = (this.distance - 10) * -0.02 + 1;
-		CTX.fillStyle = `rgba(255, 119, 169, ${Math.min(1, a)})`;
-		CTX.fillRect(this.pos.x + game.cameraOffset.x, this.pos.y + game.cameraOffset.y, this.w, this.h);
+		currentCTX.fillStyle = `rgba(255, 119, 169, ${Math.min(1, a)})`;
+		currentCTX.fillRect(this.pos.x + game.cameraOffset.x, this.pos.y + game.cameraOffset.y, this.w, this.h);
 		// alert(this.distance.toString() + " " + a);
 	}
 
@@ -3923,6 +3993,8 @@ class Spring extends Actor {
 	}
 
 	bounceObj(physObj) {
+		physObj.move(0, -1);
+		
 		const newV = this.direction.scalar(SPRING_SCALAR);
 		if (newV.x) {
 			physObj.setXVelocity(newV.x);
@@ -3998,7 +4070,7 @@ class Mask {
 	draw() {
 		if (!this.on) return;
 
-		const gradient = CTX.createRadialGradient(
+		const gradient = currentCTX.createRadialGradient(
 			this.x, this.y, this.innerRad, this.x, this.y, this.outerRad
 		);
 
@@ -4008,8 +4080,8 @@ class Mask {
 		gradient.addColorStop(1, "black");
 
 		// Set the fill style and draw a rectangle
-		CTX.fillStyle = gradient;
-		CTX.fillRect(0, 0, PIXEL_GAME_SIZE[0], PIXEL_GAME_SIZE[1]);
+		currentCTX.fillStyle = gradient;
+		currentCTX.fillRect(0, 0, PIXEL_GAME_SIZE[0], PIXEL_GAME_SIZE[1]);
 	}
 
 	toggle() {
@@ -4042,31 +4114,65 @@ class TwoEyeMask extends Mask {
 	}
 
 	draw() {
-		const leftGrad = CTX.createRadialGradient(
+		const leftGrad = currentCTX.createRadialGradient(
 			this.x, this.y / this.yscale, this.innerRad, this.x, this.y / this.yscale, this.outerRad
 		);
-		const rightGrad = CTX.createRadialGradient(
+		const rightGrad = currentCTX.createRadialGradient(
+			this.x + this.eyeDistance, this.y / this.yscale, this.innerRad, this.x + this.eyeDistance, this.y / this.yscale, this.outerRad
+		);
+
+		// Add three color stops
+		// leftGrad.addColorStop(0, "rgba(0, 0, 0, 0)");
+		// leftGrad.addColorStop(0.9, "rgba(0, 0, 0, 1)");
+		// leftGrad.addColorStop(1, this.on ? "black" : "rgba(0,0,0,0)");
+
+		leftGrad.addColorStop(0, "black");
+		leftGrad.addColorStop(0.9, "rgba(0, 0, 0, 0.0)");
+		leftGrad.addColorStop(1, this.on ? "rgba(0,0,0,0)" : "black");
+
+		rightGrad.addColorStop(0, "black");
+		rightGrad.addColorStop(0.9, "rgba(0, 0, 0, 0.0)");
+		rightGrad.addColorStop(1, this.on ? "rgba(0,0,0,0)" : "black");
+
+		// rightGrad.addColorStop(0, "rgba(0, 0, 0, 0)");
+		// rightGrad.addColorStop(0.9, "rgba(0, 0, 0, 1)");
+		// rightGrad.addColorStop(1, this.on ? "black" : "rgba(0,0,0,0)");
+		
+		// Set the fill style and draw a rectangle
+		currentCTX.setTransform(1, 0, 0, this.yscale, 0, 0);
+		
+		currentCTX.fillStyle = leftGrad;
+		currentCTX.fillRect(0, 0, this.x + this.outerRad + 1, PIXEL_GAME_SIZE[1] / this.yscale);
+		currentCTX.fillStyle = rightGrad;
+		currentCTX.fillRect(this.x + this.outerRad, 0, PIXEL_GAME_SIZE[0] * 2, PIXEL_GAME_SIZE[1] / this.yscale);
+		currentCTX.setTransform(1, 0, 0, 1, 0, 0);
+	}
+
+	drawOther() {
+		const leftGrad = currentCTX.createRadialGradient(
+			this.x, this.y / this.yscale, this.innerRad, this.x, this.y / this.yscale, this.outerRad
+		);
+		const rightGrad = currentCTX.createRadialGradient(
 			this.x + this.eyeDistance, this.y / this.yscale, this.innerRad, this.x + this.eyeDistance, this.y / this.yscale, this.outerRad
 		);
 
 		// Add three color stops
 		leftGrad.addColorStop(0, "rgba(0, 0, 0, 0)");
-		leftGrad.addColorStop(0.9, "rgba(0, 0, 0, 1)");
+		leftGrad.addColorStop(0.99, "rgba(0, 0, 0, 0)");
 		leftGrad.addColorStop(1, this.on ? "black" : "rgba(0,0,0,0)");
-		
+
 		rightGrad.addColorStop(0, "rgba(0, 0, 0, 0)");
 		rightGrad.addColorStop(0.9, "rgba(0, 0, 0, 1)");
 		rightGrad.addColorStop(1, this.on ? "black" : "rgba(0,0,0,0)");
 		
 		// Set the fill style and draw a rectangle
-		CTX.setTransform(1, 0, 0, this.yscale, 0, 0);
+		currentCTX.setTransform(1, 0, 0, this.yscale, 0, 0);
 		
-		CTX.fillStyle = leftGrad;
-		CTX.fillRect(0, 0, this.x + this.outerRad + 1, PIXEL_GAME_SIZE[1] / this.yscale);
-		CTX.fillStyle = rightGrad;
-		CTX.fillRect(this.x + this.outerRad, 0, PIXEL_GAME_SIZE[0] * 2, PIXEL_GAME_SIZE[1] / this.yscale);
-		CTX.setTransform(1, 0, 0, 1, 0, 0);
-
+		currentCTX.fillStyle = leftGrad;
+		currentCTX.fillRect(0, 0, this.x + this.outerRad + 1, PIXEL_GAME_SIZE[1] / this.yscale);
+		currentCTX.fillStyle = rightGrad;
+		currentCTX.fillRect(this.x + this.outerRad, 0, PIXEL_GAME_SIZE[0] * 2, PIXEL_GAME_SIZE[1] / this.yscale);
+		currentCTX.setTransform(1, 0, 0, 1, 0, 0);
 	}
 
 	isLookingAt(hitbox) {
@@ -4112,11 +4218,21 @@ class Angel extends Actor {
 		this.mouseDown = this.mouseDown.bind(this);
 		this.posess = this.posess.bind(this);
 
-
 		this.walkDirection = 0;
 		this.walkSpeed = 0.3;
 
 		this.posessed = false;
+
+		this.sitSprite = new Sprite(ANGEL_SPRITE);
+		this.walkSprite = new AnimatedSprite(
+			ANGEL_WALK_SPRITESHEET,
+			null,
+			[{frames: 0, onComplete: null}, {frames: 8, onComplete: "loop", nth: 8}],
+			8, 12
+		);
+		this.walkSprite.setRow(1);
+
+		this.sprite = this.sitSprite;
 	}
 
 	posess() {
@@ -4154,13 +4270,16 @@ class Angel extends Actor {
 	}
 
 	draw() {
-		// if (this.isSeen)
-			super.draw();
+		if (this.isSeen) {
+			this.sitSprite.draw(this.getX(), this.getY()-2);
+		} else {
+			this.walkSprite.draw(this.getX(), this.getY() - 2);
+		}
 	}
 
 	onPlayerCollide() {
 		if (this.isSeen) return "wall throwable";
-		else return "kill";
+		else return "kill wall";
 	}
 
 	shouldKill(p) {
@@ -4181,7 +4300,7 @@ class Angel extends Actor {
 			// this.touchedIce = true;
 		} else if ((playerCollideFunction.includes("wall") || playerCollideFunction === "") && physObj.collidable) {
 			if (physObj.isOnTopOf(this)) {
-				if (playerCollideFunction.includes("throwable")) {
+				if (playerCollideFunction.includes("throwable") || playerCollideFunction === "") {
 					physObj.move(0, -1);
 					return false;
 				} else {
@@ -4206,6 +4325,10 @@ class Angel extends Actor {
 		} else if (playerCollideFunction.includes("button")) {
 			physObj.push();
 			return playerCollideFunction.includes("wall");
+		} else if (playerCollideFunction.includes("coin")) {
+			return false;
+		} else if (playerCollideFunction.includes("torch")) {
+			return false;
 		}
 		return true;
 	}
@@ -4266,19 +4389,24 @@ class Angel extends Actor {
 		
 		if (!this.isSeen) {
 			this.setXVelocity(this.walkDirection * this.walkSpeed);
+			this.walkSprite.update();
+		}
+
+		if (!this.isOnGround()) {
+			this.fall();
+			// if (this.getY() > this.throwHeight + 5 && !this.touchedIce) {
+			// 	this.velocity.x = 0;
+			// }
 		} else {
-			// this.setXVelocity(0);
-			if (!this.isOnGround()) {
-				this.fall();
-				// if (this.getY() > this.throwHeight + 5 && !this.touchedIce) {
-				// 	this.velocity.x = 0;
-				// }
-			} else {
-				// this.setYVelocity(this.isOnGround().getYVelocity() * 0.9);
-				this.setXVelocity(this.getXVelocity() * 0.85);
-			}
+			// this.setYVelocity(this.isOnGround().getYVelocity() * 0.9);
+			this.setXVelocity(this.getXVelocity() * 0.85);
 		}
 		
+		this.walkSprite.flip = this.walkDirection < 0;
+		if (!this.isSeen) {
+			this.sitSprite.flip = this.walkDirection < 0;
+		}
+
 		// if (this.getSprite().update) this.getSprite().update();
 		super.updatePhysicsPos();
 	}
@@ -4558,7 +4686,7 @@ function drawLine(x0, y0, x1, y1) {
 	const sy = (y0 < y1) ? 1 : -1;
 	let err = dx - dy;
 	while (true) {
-		CTX.fillRect(x0 + game.cameraOffset.x, y0 + game.cameraOffset.y, 1, 1); // Do what you need to for this
+		currentCTX.fillRect(x0 + game.cameraOffset.x, y0 + game.cameraOffset.y, 1, 1); // Do what you need to for this
 		if (Math.abs(x0 - x1) < 0.01 && Math.abs(y0 - y1) < 0.01) break;
 		const e2 = 2 * err;
 		if (e2 > -dy) {
@@ -4617,10 +4745,10 @@ class DiamondThrowable extends StickyThrowable {
 		const radOff = 0.5 * Math.sin(game.animFrame / 30 * Math.PI);
 		for (let i = 0; i < numLines; ++i) {
 			let angle = 2 * Math.PI * (i + game.animFrame / 30) / numLines;
-			CTX.fillStyle = "#7e2553a0";
+			currentCTX.fillStyle = "#7e2553a0";
 			this.drawLineAround(this.getX() + 2, this.getY() + 2, angle, 20, 28 + radOff);
 			if (i % 2 === 0) {
-				CTX.fillStyle = "#ff004de0";
+				currentCTX.fillStyle = "#ff004de0";
 				this.drawLineAround(this.getX() + 2, this.getY() + 2, -angle, 8, 16);
 			}
 		}
@@ -4705,12 +4833,18 @@ class Player extends Actor {
 		if (this.getGame().debugFlying) return false;
 
 		const playerCollideFunction = physObj.onPlayerCollide();
-		if (playerCollideFunction.includes("button")) {
+		if (playerCollideFunction.includes("button") || playerCollideFunction.includes("coin")) {
 			physObj.push();
+			return false;
 		}
 		if (playerCollideFunction === "spring" && physObj.canPassThrough(this)) {
 			physObj.bounceObj(this);
 			this.canDoubleJump = true;
+		} else if (playerCollideFunction.includes("kill") && this.deathFrames === 0) {
+			if (this.sliding && physObj.direction === VectorUp) return false;
+			if (!physObj.shouldKill(this)) return false;
+			this.getLevel().killPlayer();
+			return false;
 		} else if (playerCollideFunction.includes("wall") && physObj.collidable) {
 			if (physObj.collidable && physObj.isOnTopOf(this) || (this.carrying && physObj.isOnTopOf(this.carrying))) {
 				if (playerCollideFunction.includes("throwable")) {
@@ -4742,14 +4876,16 @@ class Player extends Actor {
 				// this.slideTimer = SLIDE_TIMER;
 				this.slideBump(this.facing);
 			}
-		} else if (playerCollideFunction === "kill" && this.isTouching(physObj.getHitbox()) && this.deathFrames === 0) {
-			if (this.sliding && physObj.direction === VectorUp) return false;
-			if (!physObj.shouldKill(this)) return false;
-			this.getLevel().killPlayer();
-			return false;
 		} else if (playerCollideFunction === "semi") return false;
 
 		return true;
+	}
+
+	drawLight() {
+		const x = this.getX();
+		const y = this.getY();
+
+		drawEllipse(x + 3, y + 3, 16, "#3b1d2b");
 	}
 
 	draw() {
@@ -4880,9 +5016,9 @@ class Player extends Actor {
 				this.setXVelocity(0);
 			}
 
-			if (keys["ArrowUp"]) {
+			if (keys["jump"]) {
 				this.setYVelocity(-2);
-			} else if (keys["ArrowDown"]) {
+			} else if (keys["ArrowDown"] || keys["KeyS"]) {
 				this.setYVelocity(2);
 			} else {
 				this.setYVelocity(0);
@@ -4928,7 +5064,6 @@ class Player extends Actor {
 			}
 
 			const zPressed = this.getGame().unlocks.JUMP && keys["jump"] && !keys["PrevJump"];
-			const xPressed = keys["KeyQ"] && !this.prevXKey;
 			//If z is pressed, jjp = 8, otherwise decr jjp if jjp > 0
 			if (zPressed) {
 				this.jumpJustPressed = 133.3;
@@ -4973,11 +5108,12 @@ class Player extends Actor {
 				} else {
 					//Set yv to 0 if on ground and not jumping
 					// this.setYVelocity(onGround.getYVelocity()*0*0.9);
-					const gyv = onGround.getYVelocity();
-					if (gyv < 0) {
-						this.moveY(Math.min(gyv, this.getYVelocity()), this.onCollide);
-						this.setYVelocity(0);
-					}
+					// const gyv = onGround.getYVelocity();
+					// if (gyv < 0) {
+					// 	this.moveY(Math.min(gyv, this.getYVelocity()), this.onCollide);
+					// 	this.setYVelocity(0);
+					// }
+					this.setYVelocity(0);
 				}
 			}
 
@@ -5194,7 +5330,7 @@ class DiamondPowerup extends Button {
 		const color1 = diamondColors[this.special].color1;
 		for (let i = 0; i < 8; ++i) {
 			let angle = 2 * Math.PI * (i + game.animFrame / 30) / 8;
-			CTX.fillStyle = `#${color1}e0`;
+			currentCTX.fillStyle = `#${color1}e0`;
 			this.drawLineAround(this.getX() + xOff, this.getY() + yOff, -angle, 8, 16);
 		}
 	}
@@ -5210,10 +5346,10 @@ class DiamondPowerup extends Button {
 		const radOff = 0.5 * Math.sin(game.animFrame / 30 * Math.PI);
 		for (let i = 0; i < numLines; ++i) {
 			let angle = 2 * Math.PI * (i + game.animFrame / 30) / numLines;
-			CTX.fillStyle = `#${color0}a0`;
+			currentCTX.fillStyle = `#${color0}a0`;
 			this.drawLineAround(this.getX() + xOff, this.getY() + yOff, angle, 20, 28 + radOff);
 			if (i % 2 === 0) {
-				CTX.fillStyle = `#${color1}e0`;
+				currentCTX.fillStyle = `#${color1}e0`;
 				this.drawLineAround(this.getX() + xOff, this.getY() + yOff, -angle, 8, 16);
 			}
 		}
@@ -5290,8 +5426,58 @@ class Powerup extends Button {
 		this.getSprite().draw(this.getX(), this.getY());
 		// drawOnCanvas(new Rectangle(this.getX(), this.getY(), this.getWidth(), this.getHeight()), "#ffa0a0");
 	}
+}
 
-	
+class Torch extends Button {
+	constructor(x, y, level, centerTile, onPush) {
+		super(x-2, y, 12, 20, level, onPush);
+		this.sprite = new AnimatedSprite(
+			FLAME_SPRITESHEET,
+			null,
+			[{frames: 0, onComplete: null}, {frames: 4, onComplete: "loop", nth: 8}]
+		);
+		this.onPush = this.onPush.bind(this);
+		this.sprite.setRow(1);
+		this.timingOffset = Math.random() * 5;
+		this.torchSprite = new Sprite(TORCH_IMG, null);
+		this.offset = centerTile ? 0 : 4 - 2;
+	}
+
+	draw() {
+		const yOffset = Math.round(Math.sin(Math.PI * game.animFrame / 30) * 0.72);
+		this.torchSprite.draw(this.getX() + this.offset, this.getY() + 9 + yOffset);
+		this.sprite.draw(this.getX() + this.offset, this.getY() + 2 + yOffset);
+	}
+
+	onPlayerCollide() {
+		return "coin";
+	}
+
+	drawLight() {
+		if (!this.pushed) return false;
+		const offset = Math.sin(Math.PI * game.animFrame / 30 + this.timingOffset) * 0.6;
+		const yOffset = Math.round(Math.sin(Math.PI * game.animFrame / 30) * 0.72);
+		drawEllipse(this.getX() + 4 + this.offset, this.getY() + 10 + yOffset, 18 + offset, "#3b1d2b");
+	}
+}
+
+class Coin extends Button {
+	constructor(x, y, level, onPush) {
+		super(x, y, 8, 8, level, onPush);
+		// this.setSprite(new AnimatedSprite(sprite, null, [{frames: 0}, {frames: 4, onComplete: "loop", nth: 15}], 12, 13));
+		// this.getSprite().setRow(1);
+	}
+
+	onPlayerCollide() {
+		return "coin"
+	}
+
+	draw() {
+		if (this.pushed) return;
+		this.getHitbox().draw("yellow");
+		// this.getSprite().draw(this.getX(), this.getY());
+		// drawOnCanvas(new Rectangle(this.getX(), this.getY(), this.getWidth(), this.getHeight()), "#ffa0a0");
+	}
 }
 
 class BigButton extends Button {

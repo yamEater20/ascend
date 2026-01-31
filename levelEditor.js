@@ -26,7 +26,10 @@ const CODES = {
     "#621BB5": "81",
     "#6A23BA": "82",
     "#FFBD92": "80",
-    "#652DBA": "83"
+    "#652DBA": "83",
+    "#949494": "88",
+
+    "#FFE400": "92"
 }
 
 const LEVEL_PATH = "Levels.png";
