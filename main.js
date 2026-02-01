@@ -1523,6 +1523,7 @@ class Game {
 		currentCTX.reset();
 		this.getCurrentLevel().torches.forEach(t => t.drawLight());
 		this.getCurrentLevel().getPlayer().drawLight();
+		this.getCurrentLevel().angels.forEach(t => t.drawLight());
 
 		currentCTX = BUFFER_CTX;
 		currentCTX.reset();
@@ -2242,6 +2243,7 @@ class Level {
 	constructor(tileArr, game, levelInd) {
 		this.solids = [];
 		this.actors = [];
+		this.angels = [];
 		this.decorations = [];
 		this.torches = [];
 		this.frontDecorations = [];
@@ -2445,6 +2447,7 @@ class Level {
 					case 22:
 						const ang = new Angel(game, gameSpaceX, gameSpaceY - 2, this);
 						this.actors.push(ang);
+						this.angels.push(ang);
 						// this.mouseables.push(ang);
 						break;
 					case 23:
@@ -4322,6 +4325,15 @@ class Angel extends Actor {
 		this.walkDirection = 0;
 	}
 
+	drawLight() {
+		if (this.posessed) {
+			const x = this.getX();
+			const y = this.getY();
+
+			drawEllipse(x + 4, y + 5, 16, "#3b1d2b");
+		}
+	}
+
 	isRiding(solid) {
 		return solid.onPlayerCollide() !== "" && super.isRiding(solid);
 	}
@@ -4427,10 +4439,7 @@ class Angel extends Actor {
 	updatePhysicsPos() {
 		if (this.getLevel().getPlayer().deathFrames !== 0) return;
 		
-		// if (this.posessed && !gMouseHeld) {
-		// 	console.log("stop");
-		// 	this.posessed = false;
-		// }
+		//todo: one posess at a time
 		if (!this.prevMouse && gMouseHeld && game.unlocks["POSESS"]) {
 			this.clickHitbox.setX(this.getX() - this.clickMargin);
 			this.clickHitbox.setY(this.getY() - this.clickMargin);
@@ -4507,6 +4516,8 @@ class Angel extends Actor {
 		}
 	}
 }
+
+let gPosessing = false;
 
 class Throwable extends Actor {
 	constructor(x, y, w, h, level) {
