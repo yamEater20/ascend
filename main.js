@@ -2198,6 +2198,7 @@ class MapSec {
 			if (tileCode === 1) this.pixels.push("#5F574F");
 			// else if (52 <= tileCode && 55 >= tileCode) this.pixels.push("#FF004D");
 			else if (tileCode === 73) this.pixels.push("#AB5236");
+			else if (tileCode === 72) this.pixels.push("#19e542");
 			else this.pixels.push("#000000");
 		}
 	}
@@ -2891,12 +2892,10 @@ class Level {
 				const v = Vector({x: curSpawn.x, y: curSpawn.y})
 					.addPoint(negativeEntryPos);
 				const mag = v.magnitude();
-				console.log(mag, curMag, curSpawn.x, curSpawn.y);
 				if (mag < curMag) {
 					this.spawn = curSpawn;
 					this.currentSpawn = curSpawn;
 					curMag = mag;
-					console.log("new spawn");
 				}
 			}
 			// this.spawn = this.spawns[0];
@@ -2906,10 +2905,6 @@ class Level {
 			this.player.setY(this.currentSpawn.y);
 		}
 
-		console.log(this.currentSpawn.x, this.currentSpawn.y);
-		console.log(this.spawn.x, this.spawn.y);
-					
-		
 		this.player.spawn = this.currentSpawn;
 		this.player.facing = this.game.lastFacing;
 		this.player.getSprite().flip = this.player.facing.x > 0;
@@ -4437,7 +4432,6 @@ class Angel extends Actor {
 		// 	this.posessed = false;
 		// }
 		if (!this.prevMouse && gMouseHeld && game.unlocks["POSESS"]) {
-			console.log("!!");
 			this.clickHitbox.setX(this.getX() - this.clickMargin);
 			this.clickHitbox.setY(this.getY() - this.clickMargin);
 			if (this.clickHitbox.containsPoint(gMousePos)) {
@@ -5669,7 +5663,7 @@ function diagnostics() {
 		diagnosticTime += timeDelta;
 		if (diagnosticFrameCount === 100) {
 			frameRate = diagnosticTime / diagnosticFrameCount;
-			//console.log(frameRate);
+			console.log(frameRate);
 			diagnosticTime = 0;
 			diagnosticFrameCount = 0;
 		}
