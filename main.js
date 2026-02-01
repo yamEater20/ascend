@@ -1095,7 +1095,6 @@ class AnimatedSprite extends Sprite {
 					this.curCol = (this.curCol + 1) % maxFrames;
 				}
 			}
-			console.log(continueAnim);
 			if (this.curCol === ((data.reverse || this.continue === 2) ? maxFrames : 0)) {
 
 				if (data.onComplete == null) {
@@ -1462,6 +1461,7 @@ class Game {
 			JUMP: true,
 			SLIDE: false,
 			DJ: false,
+			POSESS: false,
 		}
 
 		this.getCurrentLevel().resetStage();
@@ -1513,6 +1513,7 @@ class Game {
 					this.emptySquareData.color,
 				)
 			}
+			
 			if (optionsCon.showing) {
 				optionsCon.draw();
 			}
@@ -1647,7 +1648,7 @@ class Game {
 				this.debugFlying = !this.debugFlying;
 			}
 			if (keys["KeyH"] && !this.prevH) {
-				this.unlocks.JUMP = !this.unlocks.JUMP;
+				this.unlocks.POSESS = !this.unlocks.POSESS;
 			}
 			if (keys["KeyJ"] && !this.prevJ) {
 				this.unlocks.SLIDE = !this.unlocks.SLIDE;
@@ -2160,11 +2161,13 @@ class WorldMap {
 	draw() {
 		const margin = 1;
 
-		const offset = Vector({x: 5, y: game.getCurrentLevel().endGameFrames === 1 ? 128 + 76 : 14});
-		const roomsW = 5;
-		const roomsH = 4;
+		const offset = Vector({x: 5 + 12, y: game.getCurrentLevel().endGameFrames === 1 ? 128 + 76 : 8});
+		const roomsW = 4;
+		const roomsH = 5;
 
-		drawOnCanvas(new Rectangle(16 + offset.x - 1, offset.y + 15, ((16 + margin) * roomsW) + 3, (16 + margin) * roomsH + 3), "#FFCCAA");
+		const totalWidth = ((16 + margin) * roomsW) + 3;
+
+		drawOnCanvas(new Rectangle(16 + offset.x - 1, offset.y + 15, totalWidth, (16 + margin) * roomsH + 3), "#FFCCAA");
 		drawOnCanvas(new Rectangle(16 + offset.x, offset.y + 16, ((16 + margin) * roomsW) + 1, (16 + margin) * roomsH + 1), "#1E2B53");
 		this.mapSections.forEach((m, i) => {
 			//if ([0,1,3,4].includes(i)) return;
@@ -2201,12 +2204,12 @@ class MapSec {
 
 	draw(offsetX, offsetY) {
 		if (this.level.myLevelInd === undefined) return;
-		if (this.level.myLevelInd === 2) {
-			if (!this.hasVisited()) {
-				currentCTX.drawImage(SPECIAL_MAP, offsetX, offsetY);
-				return;
-			}
-		}
+		// if (this.level.myLevelInd === 2) {
+		// 	if (!this.hasVisited()) {
+		// 		currentCTX.drawImage(SPECIAL_MAP, offsetX, offsetY);
+		// 		return;
+		// 	}
+		// }
 		
 		if (!this.hasVisited()) {
 			let i = 0;
@@ -2248,13 +2251,14 @@ class Level {
 		this.nextDirection = Direction.NULL;
 		this.curSpawn;
 		this.spawn;
+		this.spawns = [];
 		this.switchBlocks = [];
 		this.buttons = [];
 		this.djBlockFrames = 0;
 
 		let locationX;
 		let locationY;
-
+		
 		convertWallTiles(tileArr);
 
 		for (let t = 0; t < TILES_IN_LEVEL; t++) {
@@ -2330,7 +2334,8 @@ class Level {
 						}
 						break;
 					case 16:
-						this.spawn = new Spawn(gameSpaceX + 1, gameSpaceY + 2);
+						this.spawns.push(new Spawn(gameSpaceX + 1, gameSpaceY + 2));
+						this.spawn = this.spawns[0];
 						break;
 					case 17:
 						switch (tileCode) {
@@ -2385,6 +2390,15 @@ class Level {
 								this.solids.push(new DJBlocker(gameSpaceX, gameSpaceY, this));
 								break;
 							case 81:
+								const hasLeft = parseInt(tileArr[curTileMapInd - 1]) === 81;
+								const hasRight = parseInt(tileArr[curTileMapInd + 1]) === 81;
+								let v;
+								if (hasLeft && hasRight) v = Vector({x: 1, y: 0});
+								else if (hasLeft) v = Vector({x: 2, y: 0});
+								else if (hasRight) v = Vector({x: 0, y: 0});
+								else v = Vector({x: 1, y: 0});
+								this.decorations.push(new FlippedSemisolid(gameSpaceX, gameSpaceY, new TileSprite(SEMISOLID_TILESHEET, v), this));
+								break;
 							case 82:
 							case 83:
 								this.solids.push(new DiamondPowerup(gameSpaceX + 2, gameSpaceY - 2, this, tileCode - 81));
@@ -2420,7 +2434,8 @@ class Level {
 								break;
 							case 86:
 								x+=4;
-								onPush = () => onPickup("DJ", "#188755", LOOP3_MUSIC);
+								//onPush = () => onPickup("DJ", "#188755", LOOP3_MUSIC);
+								onPush = () => {game.unlocks["POSESS"] = true;};
 								sprite = POWERUP_DJ_SPRITE;
 								break;
 						}
@@ -2758,9 +2773,9 @@ class Level {
 		this.getAllGeometry().some(solid => {
 				if (!actor.isOnTopOf(solid) || !solid.collidable) return false;
 
-				if (solid.onPlayerCollide().includes("kill")) return false;
+				if (solid.onPlayerCollide(actor).includes("kill")) return false;
 
-				if ((solid.onPlayerCollide().includes("wall"))) {
+				if ((solid.onPlayerCollide(actor).includes("wall"))) {
 					ret = solid;
 					return true;
 				}
@@ -2772,7 +2787,7 @@ class Level {
 	isBonkHead(actor) {
 		let ret = null;
 		this.solids.some(solid => {
-			if ((solid.onPlayerCollide().includes("wall")) && actor.isUnder(solid)) {
+			if ((solid.onPlayerCollide(actor).includes("wall")) && actor.isUnder(solid)) {
 				ret = solid;
 				return true;
 			}
@@ -2783,7 +2798,7 @@ class Level {
 	isLeftOfWall(actor) {
 		let ret = null;
 		this.solids.some(solid => {
-			if ((solid.onPlayerCollide().includes("wall")) && actor.isLeftOf(solid)) {
+			if ((solid.onPlayerCollide(actor).includes("wall")) && actor.isLeftOf(solid)) {
 				ret = solid;
 				return true;
 			}
@@ -2794,7 +2809,7 @@ class Level {
 	isRightOfWall(actor) {
 		let ret = null;
 		this.solids.some(solid => {
-			if ((solid.onPlayerCollide().includes("wall")) && actor.isRightOf(solid)) {
+			if ((solid.onPlayerCollide(actor).includes("wall")) && actor.isRightOf(solid)) {
 				ret = solid;
 				return true;
 			}
@@ -2805,7 +2820,7 @@ class Level {
 	isOnIce(actor) {
 		let ret = null;
 		(this.solids.concat(this.actors)).some(solid => {
-				if ((solid.onPlayerCollide().includes("ice")) && solid.collidable && actor.isOnTopOf(solid)) {
+				if ((solid.onPlayerCollide(actor).includes("ice")) && solid.collidable && actor.isOnTopOf(solid)) {
 					ret = solid;
 					return true;
 				}
@@ -2817,7 +2832,7 @@ class Level {
 	isPushUp(actor) {
 		let ret = false;
 		this.actors.some(curActor => {
-			if (actor !== curActor && (curActor.onPlayerCollide().includes("throwable") || curActor.onPlayerCollide() === "") && actor.isUnder(curActor)) {
+			if (actor !== curActor && (curActor.onPlayerCollide(actor).includes("throwable") || curActor.onPlayerCollide(actor) === "") && actor.isUnder(curActor)) {
 				ret = curActor;
 				return true;
 			}
@@ -2841,10 +2856,7 @@ class Level {
 		this.actors.forEach(actor => {
 			const newActor = actor.respawnClone(this);
 			newActors.push(newActor);
-			if (actor.onPlayerCollide().includes("throwable")) {
-				this.throwable = newActor;
-			}
-			if (actor.onPlayerCollide() === "") {
+			if (actor.onPlayerCollide(actor) === "") {
 				this.player = newActor;
 			}
 		});
@@ -2860,16 +2872,44 @@ class Level {
 			newActors.push(this.player);
 		}
 
+
 		if (transitioning) {
 			this.player.respawnFrames = 0;
 			this.player.sliding = this.game.lastSliding;
 			this.player.canDoubleJump = this.game.lastCanDoubleJump;
 			this.player.coyoteTime = this.game.lastCoyoteTime;
+			
+			this.player.setX(this.currentSpawn.x);
+			this.player.setY(this.currentSpawn.y);
+
+			this.spawn = this.spawns[0];
+			// this.currentSpawn = this.spawn;
+			let curMag = 100000000;
+			const negativeEntryPos = Vector({x: -this.currentSpawn.x, y: -this.currentSpawn.y});
+			for (let i = 0; i < this.spawns.length; ++i) {
+				const curSpawn = this.spawns[i];
+				const v = Vector({x: curSpawn.x, y: curSpawn.y})
+					.addPoint(negativeEntryPos);
+				const mag = v.magnitude();
+				console.log(mag, curMag, curSpawn.x, curSpawn.y);
+				if (mag < curMag) {
+					this.spawn = curSpawn;
+					this.currentSpawn = curSpawn;
+					curMag = mag;
+					console.log("new spawn");
+				}
+			}
+			// this.spawn = this.spawns[0];
 		} else {
 			this.currentSpawn = Vector({x: this.spawn.x, y: this.spawn.y});
+			this.player.setX(this.currentSpawn.x);
+			this.player.setY(this.currentSpawn.y);
 		}
-		this.player.setX(this.currentSpawn.x);
-		this.player.setY(this.currentSpawn.y);
+
+		console.log(this.currentSpawn.x, this.currentSpawn.y);
+		console.log(this.spawn.x, this.spawn.y);
+					
+		
 		this.player.spawn = this.currentSpawn;
 		this.player.facing = this.game.lastFacing;
 		this.player.getSprite().flip = this.player.facing.x > 0;
@@ -3421,7 +3461,7 @@ class PhysObj {
 	updatePhysicsPos() {
 		this.move(this.velocity.x, this.velocity.y);
 		if (this.sprite && this.sprite.update) {
-			// this.sprite.update();
+			this.sprite.update();
 		}
 	}
 
@@ -3493,6 +3533,21 @@ class Decoration {
 
 	update() {
 		this.sprite.update();
+	}
+}
+
+class FlippedSemisolid extends Decoration {
+	constructor(x, y,tileSprite, level) {
+		super(x, y, tileSprite, level);
+	}
+
+	draw() {
+		currentCTX.save();
+		currentCTX.translate(0, this.y + TILE_SIZE);
+		currentCTX.scale(1, -1);
+		currentCTX.translate(0, -this.y);
+		this.sprite.draw(this.x, this.y);
+		currentCTX.restore();
 	}
 }
 
@@ -3569,14 +3624,20 @@ class Particle extends Decoration {
 }
 
 function drawEllipse(x, y, rad, colorA, colorB) {
-	const grad=currentCTX.createRadialGradient(x,y,0,x,y,rad);
-	grad.addColorStop(0,colorA);
-	grad.addColorStop(1,colorB ? colorB : colorA);
-
-	currentCTX.fillStyle = grad;
-	currentCTX.beginPath();
-	currentCTX.ellipse(x + game.cameraOffset.x, y + game.cameraOffset.y, rad, rad, 0, 0, Math.PI * 2, true);
+	currentCTX.save();
+	currentCTX.fillStyle = colorA;
+	currentCTX.ellipse(x, y, rad, rad, 0, 0, 6.28);
 	currentCTX.fill();
+	
+	// const grad=currentCTX.createRadialGradient(x,y,0,x,y,rad);
+	// grad.addColorStop(0,colorA);
+	// grad.addColorStop(1,colorB ? colorB : colorA);
+
+	// currentCTX.fillStyle = colorA;
+	// currentCTX.ellipse(x + game.cameraOffset.x, y + game.cameraOffset.y, rad, rad, 0, 0, Math.PI * 2, true);
+	// currentCTX.fill();
+
+	currentCTX.restore();
 }
 
 function drawRoundedRect(x, y, w, h, rad, colorA, colorB) {
@@ -3733,20 +3794,21 @@ class Actor extends PhysObj {
 		let remainder = Math.round(amount + this.subpixelX);
 		this.subpixelX = (amount + this.subpixelX) - remainder;
 		const direction = Vector({x: amount < 0 ? -1 : 1, y: 0});
+
 		if (remainder !== 0) {
-			const carryingObj = this.getCarrying();
+			const ridingActors = super.getLevel().getAllRidingActors(this);
 			while (remainder !== 0) {
 				let collideObj = this.collideOffset(direction);
-				if (collideObj && collideObj !== carryingObj) {
+				if (collideObj) {
 					const shouldBreak = onCollide(collideObj);
 					if (shouldBreak) {
 						break;
 					}
 				}
 				super.incrX(direction.x);
-				if (carryingObj) {
-					carryingObj.incrX(direction.x);
-				}
+				ridingActors.forEach(actor => {
+					actor.moveX(direction.x, actor.onCollide);
+				});
 				remainder -= direction.x;
 			}
 		}
@@ -3757,19 +3819,20 @@ class Actor extends PhysObj {
 		this.subpixelY = (amount + this.subpixelY) - remainder;
 		const direction = Vector({y: amount < 0 ? -1 : 1, x: 0});
 		if (remainder !== 0) {
-			const carryingObj = this.getCarrying();
 			while (remainder !== 0) {
 				let collideObj = this.collideOffset(direction);
-				if (collideObj && collideObj !== carryingObj) {
+				if (collideObj) {
 					const shouldBreak = onCollide(collideObj);
 					if (shouldBreak) {
 						break;
 					}
 				}
+				const ridingActors = super.getLevel().getAllRidingActors(this);
+
 				super.incrY(direction.y);
-				if (carryingObj && carryingObj.getCarrying() !== this) {
-					carryingObj.moveY(direction.y, () => {
-					});
+
+				if (direction.y > 0) {
+					ridingActors.forEach(a => a.moveY(direction.y, a.onCollide));
 				}
 				remainder -= direction.y;
 			}
@@ -3797,7 +3860,9 @@ class Actor extends PhysObj {
 	}
 
 	onCollide(physObj) {
-		throw new Error("implement method onCollide in subclass Actor");
+		console.error("implement method squish in subclass actor");
+		console.log("Physobj:", physObj);
+		console.log("This: ", this);
 	}
 
 	fall() {
@@ -3878,8 +3943,7 @@ class Semisolid extends Solid {
 		super.setSprite(tileSprite);
 	}
 
-	onPlayerCollide() {
-		const p = this.level.getPlayer();
+	onPlayerCollide(p) {
 		const b = p.getY() + p.getHeight() <= this.getY();
 		if (b) return "wall";
 		return "semi";
@@ -3952,7 +4016,7 @@ class Drop extends Actor {
 	}
 
 	onCollide(physObj) {
-		if (physObj.onPlayerCollide().includes("wall")) {
+		if (physObj.onPlayerCollide(this).includes("wall")) {
 			this.destroyed = true;
 			const index = this.getLevel().actors.findIndex(a => a.id === this.id);
 			if (index > -1) {
@@ -4111,9 +4175,28 @@ class TwoEyeMask extends Mask {
 		this.outerRad = 36;
 
 		this.eyeDistance = 80;
+		this.x = 0;
+		this.y = 0;
+	}
+
+	update() {
+		var mousePos = gMousePos;
+		var v = mousePos.addPoint(Vector({x: -this.x, y: -this.y}));
+		if (v.magnitude < 0.01) {
+			return;
+		}
+
+		const mag = v.magnitude();
+		const speed = Math.min(5, mag / 3);
+		v = v.scalar(speed / mag);
+		this.x += v.x;
+		this.y += v.y;
 	}
 
 	draw() {
+		if (isNaN(this.x)) this.x = 0;
+		if (isNaN(this.y)) this.y = 0;
+
 		const leftGrad = currentCTX.createRadialGradient(
 			this.x, this.y / this.yscale, this.innerRad, this.x, this.y / this.yscale, this.outerRad
 		);
@@ -4219,7 +4302,7 @@ class Angel extends Actor {
 		this.posess = this.posess.bind(this);
 
 		this.walkDirection = 0;
-		this.walkSpeed = 0.3;
+		this.walkSpeed = 0.4;
 
 		this.posessed = false;
 
@@ -4233,11 +4316,19 @@ class Angel extends Actor {
 		this.walkSprite.setRow(1);
 
 		this.sprite = this.sitSprite;
+
+		const clickMargin = 3;
+		this.clickMargin = clickMargin;
+		this.clickHitbox = new Hitbox(this.getX() - clickMargin, this.getY() - clickMargin, 8 + clickMargin * 2, 10 + clickMargin * 2);
 	}
 
 	posess() {
 		this.posessed = true;
 		this.walkDirection = 0;
+	}
+
+	isRiding(solid) {
+		return solid.onPlayerCollide() !== "" && super.isRiding(solid);
 	}
 
 	dePosess() {
@@ -4259,7 +4350,7 @@ class Angel extends Actor {
 			const maxSpeed = 2;
 			avg = avg.scalar(Math.min(avg.magnitude(), maxSpeed) / avg.magnitude());
 		}
-		this.setVelocity(avg);
+		this.setVelocity(Vector({x: 0, y: avg.y}));
 	}
 
 	mouseDown(mousePos) {
@@ -4291,10 +4382,11 @@ class Angel extends Actor {
 	}
 
 	onCollide(physObj) {
-		const playerCollideFunction = physObj.onPlayerCollide();
+		const playerCollideFunction = physObj.onPlayerCollide(this);
 		if (!this.isSeen && playerCollideFunction === "") {
 			this.getLevel().killPlayer();
 		}
+		if (playerCollideFunction === "semi") return false;
 		if (playerCollideFunction === "spring") {
 			physObj.bounceObj(this);
 			// this.touchedIce = true;
@@ -4344,8 +4436,11 @@ class Angel extends Actor {
 		// 	console.log("stop");
 		// 	this.posessed = false;
 		// }
-		if (!this.prevMouse && gMouseHeld) {
-			if (this.getHitbox().containsPoint(gMousePos)) {
+		if (!this.prevMouse && gMouseHeld && game.unlocks["POSESS"]) {
+			console.log("!!");
+			this.clickHitbox.setX(this.getX() - this.clickMargin);
+			this.clickHitbox.setY(this.getY() - this.clickMargin);
+			if (this.clickHitbox.containsPoint(gMousePos)) {
 				this.posess();
 			}
 		} else if (this.posessed && !gMouseHeld) {
@@ -4363,10 +4458,9 @@ class Angel extends Actor {
 		}
 
 		if (this.posessed) {
-			const mousePos = gMousePos.trunc();
-			let v = mousePos.addPoint(this.getPos().scalar(-1));
+			let v = gMousePos.addPoint(this.getPos().scalar(-1));
 			v = v.addPoint(Vector({x: this.getWidth(), y: this.getHeight()}).scalar(-0.5));
-			if (v.magnitude() == 0) return;
+			if (Math.abs(v.y) < 1) return;
 
 			let speed = 2;
 			if (v.magnitude() < 10) {
@@ -4374,8 +4468,8 @@ class Angel extends Actor {
 			}
 
 			v = v.scalar(1 / v.magnitude() * speed);
-
-			this.setVelocity(v);
+			
+			this.setVelocity(Vector({x: 0, y: v.y}));
 			super.updatePhysicsPos();
 			return;
 		}
@@ -4399,7 +4493,7 @@ class Angel extends Actor {
 			// }
 		} else {
 			// this.setYVelocity(this.isOnGround().getYVelocity() * 0.9);
-			this.setXVelocity(this.getXVelocity() * 0.85);
+			this.setXVelocity(this.getXVelocity() * 0.9);
 		}
 		
 		this.walkSprite.flip = this.walkDirection < 0;
@@ -4485,7 +4579,7 @@ class Throwable extends Actor {
 	}
 
 	onCollide(physObj) {
-		const playerCollideFunction = physObj.onPlayerCollide();
+		const playerCollideFunction = physObj.onPlayerCollide(this);
 		if (playerCollideFunction === "spring") {
 			physObj.bounceObj(this);
 			this.touchedIce = true;
@@ -4622,13 +4716,13 @@ class StickyThrowable extends Throwable {
 	}
 
 	fall() {
-		if (!this.stuck || this.stuck.onPlayerCollide().includes("ice")) {
+		if (!this.stuck || this.stuck.onPlayerCollide(this).includes("ice")) {
 			super.fall();
 		}
 	}
 
 	onCollide(physObj) {
-		const playerCollideFunction = physObj.onPlayerCollide();
+		const playerCollideFunction = physObj.onPlayerCollide(this);
 		if (playerCollideFunction === "spring") {
 			physObj.bounceObj(this);
 			super.touchedIce = true;
@@ -4832,7 +4926,7 @@ class Player extends Actor {
 	onCollide(physObj) {
 		if (this.getGame().debugFlying) return false;
 
-		const playerCollideFunction = physObj.onPlayerCollide();
+		const playerCollideFunction = physObj.onPlayerCollide(this);
 		if (playerCollideFunction.includes("button") || playerCollideFunction.includes("coin")) {
 			physObj.push();
 			return false;
@@ -4847,22 +4941,11 @@ class Player extends Actor {
 			return false;
 		} else if (playerCollideFunction.includes("wall") && physObj.collidable) {
 			if (physObj.collidable && physObj.isOnTopOf(this) || (this.carrying && physObj.isOnTopOf(this.carrying))) {
-				if (playerCollideFunction.includes("throwable")) {
-					//todo
-					if (playerCollideFunction.includes("sticky") && physObj.stuck) {
-						this.setYVelocity(0);
-						physObj.setYVelocity(0);
-						return true;
-					} else if (!physObj.isOnGround()) {
-						// physObj.moveY(-1, physObj.onCollide);
-					}
-				} else {
-					this.setYVelocity(0);
-					this.jumpJustPressed = 0;
-					this.xJustPressed = 0;
-				}
-			} else if (this.isOnTopOf(physObj)) {
 				this.setYVelocity(0);
+				this.jumpJustPressed = 0;
+				this.xJustPressed = 0;
+			} else if (this.isOnTopOf(physObj)) {
+				this.setYVelocity(Math.min(0, this.getYVelocity()));
 			} else if (this.sliding && (this.isLeftOf(physObj) || this.isRightOf(physObj)) && this.slideTimer <= 0) {
 				const yDiff = physObj.getY() - this.getY();
 				if (yDiff < 3 && yDiff >= 0) {
@@ -4994,7 +5077,7 @@ class Player extends Actor {
 		this.carrying = super.getLevel().getThrowable();
 		this.carrying.startCarrying();
 
-		if (this.carrying.onPlayerCollide().includes("diamond")) {
+		if (this.carrying.onPlayerCollide(this).includes("diamond")) {
 			audioCon.playSoundEffect(GEM_PICKUP_SFX, () => {
 				audioCon.playSong(END_MUSIC, true);
 				audioCon.queueSong(null)
@@ -5037,7 +5120,7 @@ class Player extends Actor {
 				game.spawnSlideParticles(this.getX(), this.getY(), this.facing.x);
 			}
 
-			if (onGround && !onGround.onPlayerCollide().includes("button")) this.getGame().resetFellHeight();
+			if (onGround && !onGround.onPlayerCollide(this).includes("button")) this.getGame().resetFellHeight();
 
 			if (keys["KeyR"]) {
 				this.getLevel().killPlayer();
@@ -5071,7 +5154,7 @@ class Player extends Actor {
 				this.jumpJustPressed -= timeDelta;
 			}
 
-			if (onGround && onGround.onPlayerCollide() === "wall" && !this.wasOnGround) {
+			if (onGround && onGround.onPlayerCollide(this) === "wall" && !this.wasOnGround) {
 				this.getLevel().pushDustSprite(new GroundDustSprite(this.getX(), this.getY() - 2, -this.facing.x, this.level))
 			}
 
@@ -5113,7 +5196,7 @@ class Player extends Actor {
 					// 	this.moveY(Math.min(gyv, this.getYVelocity()), this.onCollide);
 					// 	this.setYVelocity(0);
 					// }
-					this.setYVelocity(0);
+					this.setYVelocity(Math.min(0, this.getYVelocity()));
 				}
 			}
 
@@ -5261,7 +5344,7 @@ class Button extends Solid {
 		const offset = Math.sin(Math.PI * game.animFrame / 30 + this.timingOffset) * 0.6;
 		super.getSprite().draw(Math.floor(this.getX() / TILE_SIZE) * TILE_SIZE, this.getY() - TILE_SIZE + this.getHeight());
 		if (!this.pushed) {
-			drawEllipse(this.getX() + 4, this.getY() + 1, 8 + offset, "rgba(0,228,54,0.4)","rgba(0,228,54,0.0)");
+			drawEllipse(this.getX() + 4, this.getY() + 1, 8 + offset, "rgba(0,228,54,0.4)");
 		}
 	}
 }
