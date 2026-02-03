@@ -57,11 +57,13 @@ const MAIN_CHARA_SPRITESHEET = document.getElementById("main-chara-spritesheet")
 const SPRING_SPRITESHEET = document.getElementById("spring-spritesheet");
 const SPAWN_SPRITESHEET = document.getElementById("spawn-spritesheet");
 const SKULL_IMG = document.getElementById("skull-img");
+const GOLDEN_GUY = document.getElementById("golden-guy");
 const DIAMOND_IMGS = [
 	document.getElementById("diamond-img"),
 	document.getElementById("diamond-special-img"),
 	document.getElementById("diamond-fast-img")
 ];
+const MASK_ON_GUY = document.getElementById("mask-on-guy");
 
 const THROWABLE_SPRITESHEET = document.getElementById("throwable-spritesheet");
 const FLAME_SPRITESHEET = document.getElementById("flame-spritesheet");
@@ -87,7 +89,8 @@ const DEATH_SPRITESHEET = document.getElementById("death-spritesheet");
 const TITLE_IMG = document.getElementById("title-img");
 const ARROW_IMG = document.getElementById("arrow-img");
 
-const DJBLOCKER_SPRITE = document.getElementById("djblocker-img");
+const WIRES_SPRITE = document.getElementById("wires");
+const ANGEL_POSESSED = document.getElementById("angel-posessed");
 
 const POWERUP_JUMP_SPRITE = document.getElementById("powerup-jump");
 const POWERUP_SLIDE_SPRITE = document.getElementById("powerup-slide");
@@ -98,6 +101,9 @@ const SPECIAL_MAP = document.getElementById("special-map");
 const BG_SPRITE = document.getElementById("bg-sprite");
 
 let game;
+
+let dialogue;
+let dialogueThank;
 
 //https://www.storyblocks.com/audio/stock/rainforest-bfw7-_sjvkcm8i51u.html
 
@@ -472,6 +478,21 @@ const PIXEL_LETTERS = {
 		[1, ,],
 		[, ,]
 	],
+	'@': [
+		[,1,1,1,],
+		[1,,1,1,1],
+		[1,,1,,1],
+		[1,,1,1,1],
+		[1,,,,],
+		[,1,1,1,1],
+	],
+	'_': [
+		[, ,],
+		[, ,],
+		[, ,],
+		[, ,],
+		[1,1,1],
+	],
 };
 
 function bezier(ti, x1, x2, y1, y2) {
@@ -503,6 +524,22 @@ function getWidthOfText(txt, size) {
 	ret += letters.length * size * 2;
 	return Math.round(ret);
 }
+
+function shuffleArray(array) {
+	let currentIndex = array.length;
+  
+	// While there remain elements to shuffle...
+	while (currentIndex != 0) {
+  
+	  // Pick a remaining element...
+	  let randomIndex = Math.floor(Math.random() * currentIndex);
+	  currentIndex--;
+  
+	  // And swap it with the current element.
+	  [array[currentIndex], array[randomIndex]] = [
+		array[randomIndex], array[currentIndex]];
+	}
+  }
 
 function writeText(txt, size, pos, color, spacing) {
 	let needed = [];
@@ -591,13 +628,13 @@ function codeIsIce(code) {
 
 
 const CAVE_AMBIANCE = new Howl({
-	src: ['Songs/cavesounds1.ogg'], loop: true,
+	src: ['Songs/rain.ogg'], loop: true,
 });
 const HEADER_MUSIC = new Howl({
 	src: ['Songs/velvetOpening.ogg'], loop: false,
 });
 const LOOP1_MUSIC = new Howl({
-	src: ['Songs/velvet1.ogg'], loop: false,
+	src: ['Songs/dark-secrets.ogg'], loop: false,
 });
 const LOOP2_MUSIC = new Howl({
 	src: ['Songs/velvet2.ogg'], loop: false,
@@ -637,7 +674,7 @@ const DJUMP_SFX = new Howl({
 });
 
 const UNLOCK_SFX = new Howl({
-	src: ['sfx/pianoPickup.ogg'], loop: false,
+	src: ['sfx/pickup-posess.ogg'], loop: false,
 });
 
 const BUTTON_SFX = new Howl({
@@ -652,12 +689,16 @@ const PONG_SFX = new Howl({
 	src: ['sfx/Pong.wav'], loop: false,
 });
 
-const INCORRECT_SFX = new Howl({
-	src: ['sfx/Incorrect.ogg'], loop: false,
+const MAP_SFX = new Howl({
+	src: ['sfx/map.ogg'], loop: false,
 });
 
-const CORRECT_SFX = new Howl({
-	src: ['sfx/Correct.ogg'], loop: false,
+const MAP2_SFX = new Howl({
+	src: ['sfx/map2.ogg'], loop: false,
+});
+
+const TORCH_SFX = new Howl({
+	src: ['sfx/torch.ogg'], loop: false,
 });
 
 const MAX_VOLS = {
@@ -676,7 +717,7 @@ class AudioController {
 		this.curSong = null;
 		this.curSongId = -1;
 		this.musicVolume = 0.5;
-		this.sfxVolume = 1;
+		this.sfxVolume = 2;
 
 		this.nowPlaying = "";
 	}
@@ -1423,11 +1464,7 @@ class Game {
 			// if(levelInd === 0) {level = new StartScreen(sliceArr, this);}
 
 			const arrCopy = [...sliceArr];
-			if (levelInd === 2 || levelInd === 4 || levelInd === 0) {
-				level = new EndScreen(sliceArr, this, levelInd);
-			} else {
-				level = new Level(sliceArr, this, levelInd);
-			}
+			level = new Level(sliceArr, this, levelInd);
 
 			this.map.pushMapSec(arrCopy, level.location, level);
 
@@ -1436,7 +1473,7 @@ class Game {
 
 		this.oobScreen = new OOBScreen();
 
-		this.levelInd = 8;
+		this.levelInd = 5;
 		this.visitedLevels[this.levelInd] = true;
 
 		this.cameraOffset = Vector({x: 0, y: 0});
@@ -1474,11 +1511,28 @@ class Game {
 		this.maxMousePositions = 10;
 
 		this.bg = new Sprite(BG_SPRITE);
+
+		this.maskTime = -1;
+		this.getMaskTime = -1;
 	}
 
 	getCurrentLevel() {
 		if (this.levelInd < 0) return this.oobScreen;
 		return this.levels[this.levelInd];
+	}
+
+	giveMask(maskTime) {
+		this.mask.giveMask(maskTime);
+		this.maskTime = maskTime;
+		this.levels[6].addEnemy();
+		this.levels[8].addOtherEnemy();
+		this.levels[5].addOtherEnemy2();
+
+		this.stopPlayTimer();
+	}
+
+	getMask() {
+		this.getMaskTime = window.performance.now();
 	}
 
 	drawCurrentLevel() {
@@ -1519,6 +1573,32 @@ class Game {
 			}
 		}
 
+		if (this.getMaskTime < 0) {
+			draw();
+			return;
+		}
+
+		if (this.getMaskTime > 0 && window.performance.now() - this.getMaskTime < 10000) {
+			currentCTX.fillStyle = "black";
+			currentCTX.rect(0, 0, PIXEL_GAME_SIZE[0], PIXEL_GAME_SIZE[1]);
+			currentCTX.fill();
+
+			dialogue.draw();
+			dialogue.update();
+			return;
+		}
+
+		const tSinceMaskGive = window.performance.now() - this.maskTime;
+		if ((this.maskTime > 0 && tSinceMaskGive > 3000)) {
+			draw();
+
+			if (this.levelInd === 9) {
+				dialogueThank.draw();
+				dialogueThank.update();
+			}
+			return;
+		}
+
 		currentCTX = TORCH_BUFFER_CTX;
 		currentCTX.reset();
 		this.getCurrentLevel().torches.forEach(t => t.drawLight());
@@ -1545,9 +1625,22 @@ class Game {
 		
 		currentCTX.drawImage(bufferCanvas, 0, 0);
 
-		currentCTX.fillStyle = "black";
-		currentCTX.rect(0, 0, PIXEL_GAME_SIZE[0], PIXEL_GAME_SIZE[1]);
-		currentCTX.fill();
+		const now = window.performance.now();
+		const tSince = now - this.maskTime;
+		let prevAlpha = currentCTX.globalAlpha;
+		if (this.maskTime >= 0) {
+			currentCTX.globalCompositeOperation = 'source-over';
+			draw();
+			currentCTX.globalAlpha = Math.max(1 - tSince / 3000, 0);
+			currentCTX.fillStyle = "black";
+			currentCTX.rect(0, 0, PIXEL_GAME_SIZE[0], PIXEL_GAME_SIZE[1]);
+			currentCTX.fill();
+			currentCTX.globalAlpha = prevAlpha;
+		} else {
+			currentCTX.fillStyle = "black";
+			currentCTX.rect(0, 0, PIXEL_GAME_SIZE[0], PIXEL_GAME_SIZE[1]);
+			currentCTX.fill();
+		}
 
 		return;
 		currentCTX.globalCompositeOperation = "source-atop";
@@ -1638,7 +1731,7 @@ class Game {
 
 		keys["moveLeft"] = keys["ArrowLeft"] || keys["KeyA"];
 		keys["moveRight"] = keys["ArrowRight"] || keys["KeyD"];
-		keys["jump"] = keys["ArrowUp"] || keys["KeyW"];
+		keys["jump"] = keys["ArrowUp"] || keys["KeyW"] || keys["Space"];
 		keys["slide"] = keys["KeyX"] || keys["KeyM"];
 		
 		if (keys["ArrowLeft"] || keys["ArrowRight"]) this.controlScheme = 0;
@@ -1694,12 +1787,12 @@ class Game {
 	}
 
 	cAudio(keyC, prevC) {
-		if (keyC && !prevC) audioCon.playSoundEffect(PING_SFX);
-		if (!keyC && prevC) audioCon.playSoundEffect(PONG_SFX);
+		if (keyC && !prevC) audioCon.playSoundEffect(MAP_SFX);
+		if (!keyC && prevC) audioCon.playSoundEffect(MAP2_SFX);
 	}
 
 	onLastLevel() {
-		return this.levelInd === 2;
+		return false;
 	}
 
 	updateLevelPhysicsPos() {
@@ -1737,21 +1830,19 @@ class Game {
 		this.setLevel(this.navigateMap(this.levelInd, direction), direction, playerPos)
 	}
 
+	stopPlayTimer() {
+		const t = window.performance.now();
+		this.milisecondsSinceStart = () => {
+			return t - this.startTime;
+		}
+	}
+
 	setLevel(ind, direction, playerPos) {
 		this.getCurrentLevel().dustSprites = [];
 
 		this.levelInd = ind;
 		if (ind < 0) return;
 
-		if (this.onLastLevel() && !this.visitedLevels[ind]) {
-			const t = window.performance.now();
-			this.milisecondsSinceStart = () => {
-				return t - this.startTime;
-			};
-			audioCon.fadeOutSong(750);
-		}
-
-		this.visitedLevels[ind] = true;
 		/*if(this.levelInd > 0 && this.levelInd < 11) {
             if(audioCon.curSong._src !== STAGE1_MUSIC._src && audioCon.curSong._src !== BEGINNING_MUSIC._src) {audioCon.playSong(STAGE1_MUSIC);}
             else {audioCon.queueSong(STAGE1_MUSIC);}
@@ -1761,6 +1852,7 @@ class Game {
         }*/
 		this.getCurrentLevel().setCurrentSpawn(direction, playerPos);
 		this.getCurrentLevel().resetStage(true);
+		this.visitedLevels[ind] = true;
 		this.getPlayer().setYVelocity(this.lastYVelocity);
 		this.diamonds.forEach(d => {d.setRealPos(this.getPlayer().getPos())});
 	}
@@ -1873,7 +1965,7 @@ class Game {
 		}
 	}
 
-	spawnSpringParticles(x, y) {
+	spawnSpringParticles(x, y, color) {
 		for (let i = 0; i < 5; ++i) {
 			const spawnX = x + Math.random() * 2;
 			const curLevel = this.getCurrentLevel();
@@ -1887,7 +1979,7 @@ class Game {
 				const py = clampedQuadratic(t, (50+r1), (0.6 + r2), (0.6 + r2) / 2 + r2);
 				return {x: spawnX + px, y: y + py};
 			}
-			const dust = new Particle(curLevel, "#ff004d", p, Vector({x:1,y:1}));
+			const dust = new Particle(curLevel, color, p, Vector({x:1,y:1}));
 			curLevel.pushDustSprite(dust);
 		}
 	}
@@ -1972,13 +2064,16 @@ const keyNames = [
 
 function getHintText(levelInd, special) {
 	switch (levelInd) {
-		case 12:
-			if (special === 2) return {text: "Press r to restart", pos: Vector({x: 24, y:32})};
-			return {text: "Arrow keys / WASD to move", pos: Vector({x: 16, y:32})};
-		case 11: return {text: `Hold ${keyNames[game.controlScheme].map} for map`, pos: Vector({x: 54, y:16})};
-		case 10: return {text: `Press ${keyNames[game.controlScheme].jump} to jump`, pos: Vector({x: 34, y:116})};
-		case 14: return {text: `Press ${keyNames[game.controlScheme].slide} to slide through spikes`, pos: Vector({x: 3, y:32})};
-		case 15: return {text: "Jump in midair to double jump", pos: Vector({x: 8, y:8})};
+		case 5: return {text: game.maskTime > 0 ? "" : `WASD to move`, pos: Vector({x: 72, y:16})};
+		case 7: return {text: `Hold c for map`, pos: Vector({x: 3 * 8, y: 9 * 8})};
+		case 16: return {text: `Hold left click to Possess`, pos: Vector({x: 2 * 8 + 2, y: 9 * 8})};
+		// case 12:
+		// 	if (special === 2) return {text: "Press r to restart", pos: Vector({x: 24, y:32})};
+		// 	return {text: "Arrow keys / WASD to move", pos: Vector({x: 16, y:32})};
+		// case 11: return {text: `Hold ${keyNames[game.controlScheme].map} for map`, pos: Vector({x: 54, y:16})};
+		// case 10: return {text: `Press ${keyNames[game.controlScheme].jump} to jump`, pos: Vector({x: 34, y:116})};
+		// case 14: return {text: `Press ${keyNames[game.controlScheme].slide} to slide through spikes`, pos: Vector({x: 3, y:32})};
+		// case 15: return {text: "Jump in midair to double jump", pos: Vector({x: 8, y:8})};
 	}
 }
 
@@ -2162,21 +2257,21 @@ class WorldMap {
 	draw() {
 		const margin = 1;
 
-		const offset = Vector({x: 5 + 12, y: game.getCurrentLevel().endGameFrames === 1 ? 128 + 76 : 8});
-		const roomsW = 4;
-		const roomsH = 5;
+		const offset = Vector({x: 5, y: game.getCurrentLevel().endGameFrames === 1 ? 128 + 76 : 8});
+		const roomsW = 5;
+		const roomsH = 4;
 
 		const totalWidth = ((16 + margin) * roomsW) + 3;
 
 		drawOnCanvas(new Rectangle(16 + offset.x - 1, offset.y + 15, totalWidth, (16 + margin) * roomsH + 3), "#FFCCAA");
-		drawOnCanvas(new Rectangle(16 + offset.x, offset.y + 16, ((16 + margin) * roomsW) + 1, (16 + margin) * roomsH + 1), "#1E2B53");
+		drawOnCanvas(new Rectangle(16 + offset.x, offset.y + 16, ((16 + margin) * roomsW) + 1, (16 + margin) * roomsH + 1), "#342b2d");
 		this.mapSections.forEach((m, i) => {
-			//if ([0,1,3,4].includes(i)) return;
+			if ([0,10,15].includes(i)) return;
 
 			const x = (m.level.location.x + 1) * (TILE_MAP_SIZE[0] + margin) + offset.x;
 			const y = (m.level.location.y + 1) * (TILE_MAP_SIZE[1] + margin) + offset.y;
 			m.draw(x, y);
-		})
+		});
 	}
 }
 
@@ -2196,9 +2291,9 @@ class MapSec {
 	convertToPixels(tileArr) {
 		for (let t = 0; t < TILES_IN_LEVEL; t++) {
 			const tileCode = parseInt(tileArr[t]);
-			if (tileCode === 1) this.pixels.push("#5F574F");
+			if (tileCode === 1) this.pixels.push("#804865");
 			// else if (52 <= tileCode && 55 >= tileCode) this.pixels.push("#FF004D");
-			else if (tileCode === 73) this.pixels.push("#AB5236");
+			else if (tileCode === 73) this.pixels.push("#856f73");
 			else if (tileCode === 72) this.pixels.push("#19e542");
 			else this.pixels.push("#000000");
 		}
@@ -2206,20 +2301,21 @@ class MapSec {
 
 	draw(offsetX, offsetY) {
 		if (this.level.myLevelInd === undefined) return;
-		// if (this.level.myLevelInd === 2) {
-		// 	if (!this.hasVisited()) {
-		// 		currentCTX.drawImage(SPECIAL_MAP, offsetX, offsetY);
-		// 		return;
-		// 	}
-		// }
 		
 		if (!this.hasVisited()) {
 			let i = 0;
 			for (let y = 0; y < TILE_MAP_SIZE[1]; y++) {
 				for (let x = 0; x < TILE_MAP_SIZE[0]; x++) {
-					drawPixel(offsetX + x, offsetY + y, (i+y) % 2 == 0 ? "#000000" : "#1d2b53");
+					drawPixel(offsetX + x, offsetY + y, (i+y) % 2 == 0 ? "#000000" : "#342b2d");
 					i++;
 				}
+			}
+
+			if (this.level.myLevelInd === 9) {
+				drawPixel(offsetX + 8, offsetY + 12, "#ffec27");
+				drawPixel(offsetX + 9, offsetY + 12, "#ffec27");
+				drawPixel(offsetX + 8, offsetY + 11, "#ffec27");
+				drawPixel(offsetX + 9, offsetY + 11, "#ffec27");
 			}
 			return;
 		}
@@ -2236,6 +2332,13 @@ class MapSec {
 			const p = this.level.getPlayer();
 			drawPixel(offsetX + Math.floor(p.getX() /TILE_SIZE), offsetY + Math.floor(p.getY() /TILE_SIZE), "#ff0000")
 		}
+
+		if (this.level.myLevelInd === 9) {
+			drawPixel(offsetX + 8, offsetY + 12, "#ffec27");
+			drawPixel(offsetX + 9, offsetY + 12, "#ffec27");
+			drawPixel(offsetX + 8, offsetY + 11, "#ffec27");
+			drawPixel(offsetX + 9, offsetY + 11, "#ffec27");
+		}
 	}
 }
 
@@ -2244,6 +2347,7 @@ class Level {
 		this.solids = [];
 		this.actors = [];
 		this.angels = [];
+		this.wires = [];
 		this.decorations = [];
 		this.torches = [];
 		this.frontDecorations = [];
@@ -2263,6 +2367,11 @@ class Level {
 		let locationY;
 		
 		convertWallTiles(tileArr);
+
+		let vineInds = [0, 1, 2, 3];
+		shuffleArray(vineInds);
+		let plantInds = [0, 1, 2, 3];
+		shuffleArray(plantInds);
 
 		for (let t = 0; t < TILES_IN_LEVEL; t++) {
 			const x = t % TILE_MAP_SIZE[0];
@@ -2308,12 +2417,13 @@ class Level {
 								// this.actors.push(this.player);
 								break;
 							case 57:
-								this.throwable = new Throwable(gameSpaceX + 1, gameSpaceY + 2, TILE_SIZE - 2, TILE_SIZE - 2, this);
-								this.actors.push(this.throwable);
+								// this.throwable = new Throwable(gameSpaceX + 1, gameSpaceY + 2, TILE_SIZE - 2, TILE_SIZE - 2, this);
+								// this.actors.push(this.throwable);
 								break;
 							case 58:
-								this.throwable = new StickyThrowable(gameSpaceX + 1, gameSpaceY + 2, TILE_SIZE - 2, TILE_SIZE - 2, this);
-								this.actors.push(this.throwable);
+								// this.throwable = new StickyThrowable(gameSpaceX + 1, gameSpaceY + 2, TILE_SIZE - 2, TILE_SIZE - 2, this);
+								// this.actors.push(this.throwable);
+								break;
 							default:
 								break
 						}
@@ -2327,7 +2437,10 @@ class Level {
 							case 61:
 								centerTile = true;
 							case 62:
-								const torch = new Torch(gameSpaceX, gameSpaceY, this, centerTile, () => {});
+								const torch = new Torch(gameSpaceX, gameSpaceY, this, centerTile, () => {
+									game.spawnSpringParticles(gameSpaceX, gameSpaceY+8, "#e89075");
+									audioCon.playSoundEffect(TORCH_SFX);
+								});
 								this.torches.push(torch);
 								this.solids.push(torch);
 								break;
@@ -2343,10 +2456,20 @@ class Level {
 					case 17:
 						switch (tileCode) {
 							case 68:
-								this.frontDecorations.push(new Vine(gameSpaceX, gameSpaceY, this));
+								if (vineInds.length === 0) {
+									vineInds = [0, 1, 2, 3];
+									shuffleArray(vineInds);
+								}
+								const vineInd = vineInds.pop();
+								this.frontDecorations.push(new Vine(gameSpaceX, gameSpaceY, this, vineInd));
 								break;
 							case 69:
-								this.frontDecorations.push(new Plant(gameSpaceX, gameSpaceY, this));
+								if (plantInds.length === 0) {
+									plantInds = [0, 1, 2, 3];
+									shuffleArray(plantInds);
+								}
+								const plantInd = plantInds.pop();
+								this.frontDecorations.push(new Plant(gameSpaceX, gameSpaceY, this, plantInd));
 								break;
 							case 70:
 								this.solids.push(new Pedestal(gameSpaceX, gameSpaceY, this));
@@ -2438,7 +2561,7 @@ class Level {
 							case 86:
 								x+=4;
 								//onPush = () => onPickup("DJ", "#188755", LOOP3_MUSIC);
-								onPush = () => {game.unlocks["POSESS"] = true;};
+								onPush = () => {game.unlocks["POSESS"] = true; this.showHintText(); audioCon.playSoundEffect(UNLOCK_SFX);};
 								sprite = POWERUP_DJ_SPRITE;
 								break;
 						}
@@ -2479,8 +2602,39 @@ class Level {
 		this.endLevelFrames = 0;
 		this.opacity = 0;
 
-		if (this.myLevelInd === 11) this.hintText = true;
-		if (this.myLevelInd === 12) this.hintText = true;
+		if (this.myLevelInd === 9) {
+			this.solids.push(new GoldenGuy(64+1, 64+16-2, this));
+			lvl9Wires(this.wires);
+		} else if (this.myLevelInd === 6) {
+			this.solids.push(new MaskPickup(8 * 8, 9 * 8));
+		}
+
+		if (this.myLevelInd === 19) {
+			lvl19Wires(this.wires);
+		} else if (this.myLevelInd === 18) {
+			lvl18Wires(this.wires);
+		} else if (this.myLevelInd === 11) {
+			lvl11Wires(this.wires);
+		} else if (this.myLevelInd === 5) {
+			lvl5Wires(this.wires);
+		} else if (this.myLevelInd === 3) {
+			lvl3Wires(this.wires);
+		}
+	}
+
+	addEnemy() {
+		const angel = new Angel(game, 8 * 8, 10 * 8+6, this);
+		this.solids.push(angel);
+	}
+
+	addOtherEnemy() {
+		const angel = new Angel(game, 7 * 8, 13 * 8 + 6, this);
+		this.solids.push(angel);
+	}
+
+	addOtherEnemy2() {
+		const angel = new Angel(game, 2 * 8, 6 * 8 + 6, this);
+		this.solids.push(angel);
 	}
 
 	setCurrentSpawn(direction, playerPos) {
@@ -2523,17 +2677,19 @@ class Level {
 		this.decorations.forEach(curItem => {
 			curItem.draw();
 		});
-		this.getSolids().forEach(curItem => {
-			curItem.draw();
-		});
-		this.actors.forEach(item => {
-			item.draw();
-		});
-		if (this.throwable) this.throwable.draw();
 		this.player.draw();
 		this.frontDecorations.forEach(curItem => {
 			curItem.draw();
 		});
+		this.getSolids().forEach(curItem => {
+			curItem.draw();
+		});
+		this.actors.forEach(item => {
+			if (item.onPlayerCollide() === "") return;
+			item.draw();
+		});
+		this.wires.forEach(w => w.draw());
+		
 		this.dustSprites.forEach(i => i.draw());
 		if (this.hintText) {
 			const p = this.hintText.pos;
@@ -2662,14 +2818,13 @@ class Level {
         *  2) Assuming all solids are sorted, get a slice of the solids array that could possibly intersect with
         *     the actor's hitbox in the x direction
         *  3) Only check collisions with that slice */
-		let ret = null;
+		const ret = [];
 		this.getAllGeometry().some(checkObj => {
 			if (physObj.isOverlap(checkObj, offset)) {
 				if (!checkObj.collidable) {
 					physObj.onCollide(checkObj);
 				} else {
-					ret = checkObj;
-					return;
+					ret.push(checkObj);
 				}
 			}
 		});
@@ -2855,6 +3010,14 @@ class Level {
 	}
 
 	resetStage(transitioning) {
+		
+		if (this.myLevelInd === 5 && game && game.maskTime > 0) this.hinttext = true;
+		else if (this.myLevelInd === 5 && window.performance.now() < 1000) this.hintText = true;
+		else if (this.myLevelInd === 5 && this.getGame().visitedLevels[5]) this.hintText = false;
+		
+		if (this.myLevelInd === 7) this.hintText = true;
+		if (this.myLevelInd === 7 && this.getGame().maskTime > 0) this.hintText = false;
+
 		let newActors = [];
 		this.game.respawn();
 		this.actors.forEach(actor => {
@@ -2914,17 +3077,6 @@ class Level {
 
 		this.endLevelFrames = 0;
 		this.actors = newActors;
-
-		if (this.myLevelInd === 11 && this.getGame().visitedLevels[5]) this.hintText = false;
-		if (this.myLevelInd === 12 && this.getGame().unlocks.JUMP) this.hintText = false;
-		if (this.myLevelInd === 10 && this.getGame().unlocks.SLIDE) this.hintText = false;
-		if (this.myLevelInd === 14 && this.getGame().unlocks.DJ) this.hintText = false;
-		if (this.myLevelInd === 15 && this.getGame().visitedLevels[5]) this.hintText = false;
-
-		if (this.myLevelInd === 12) {
-			const isStuck = this.player.getX() < 104 && this.player.getY() >= 106;
-			if (isStuck) this.hintText = 2;
-		}
 	}
 
 	killPlayer(x, y) {
@@ -3198,19 +3350,25 @@ class OOBScreen {
 		this.ind = 0;
 		this.lastInd = 0;
 		this.formalComplaintFiled = false;
+	}
 
+	setup() {
 		this.strs = [
-			"Dear player,",
+			"Credits:",
 			"",
-			"It appears you have broken out",
-			"of bounds somehow, probably by",
-			"jumping off the pedestal in",
-			"the yellow diamond room.",
-			"Please press r to file a formal",
-			"complaint.",
+			"Development:",
+			"@yamEater",
 			"",
-			"Sincerely,",
-			"YamEater (the dev)"
+			"Music:",
+			"'Dark Secrets'",
+			"By John Presstone",
+			"",
+			"Playtesting:",
+			"@_boomo_, CL",
+			"",
+			`Final time: ${game.formatTimeSinceStart()}`,
+			`Deaths: ${game.deaths}`,
+			"Thank you for playing!",
 		]
 
 		this.strLengthSums = [0];
@@ -3220,40 +3378,37 @@ class OOBScreen {
 	}
 
 	drawAll() {
+		if (!this.strs) {
+			this.setup();
+		}
+		
 		currentCTX.fill = "black";
 		currentCTX.fillRect(0, 0, PIXEL_GAME_SIZE[0], PIXEL_GAME_SIZE[1]);
 
 		this.strs.forEach((str, i) => {
 			if (this.ind > this.strLengthSums[i]) {
 				const y = (i + 1) * 8;
-				writeText(str.substring(0, this.ind - this.strLengthSums[i]), 1, Vector({x: 8, y: y}), "white");
+				writeText(str.substring(0, this.ind - this.strLengthSums[i]), 1, Vector({x: 4, y: y - 4}), "white");
 			}
 		});
 	}
 
 	setKeys(keys) {
-		if (this.ind === 0) audioCon.fadeOutSong(0);
-		if (!this.formalComplaintFiled && keys["KeyR"]) {
-			canvas.style.display = "none";
-			audioCon.sfxVolume = 0;
-			const iframe = document.getElementById("formal-complaint");
-			iframe.style.display = "block";
-			audioCon.playSong(FORMAL_COMPLAINT_MUSIC, true);
-			this.formalComplaintFiled = true;
-		}
 	}
 
 	updatePhysicsAllPos() {
 		this.frame += timeDelta;
 		this.ind = Math.round(this.frame / 100);
 
-		if (this.ind > this.lastInd && this.ind < this.strLengthSums[this.strLengthSums.length-1]) audioCon.playSoundEffect(Math.random() > 0.5 ? PONG_SFX : PING_SFX);
+		if (this.ind > this.lastInd && this.ind < this.strLengthSums[this.strLengthSums.length-1]) audioCon.playSoundEffect(PONG_SFX);
 
 		this.lastInd = this.ind;
 	}
 
 	spawnBat() {}
 	spawnDrop() {}
+
+	mouseDown() {}
 }
 
 class EndScreen extends Level {
@@ -3534,6 +3689,12 @@ class Decoration {
 	}
 }
 
+class Wire extends Decoration {
+	constructor(x, y, v, level) {
+		super(x * 8, y * 8, new TileSprite(WIRES_SPRITE, v), level);
+	}
+}
+
 class FlippedSemisolid extends Decoration {
 	constructor(x, y,tileSprite, level) {
 		super(x, y, tileSprite, level);
@@ -3623,6 +3784,7 @@ class Particle extends Decoration {
 
 function drawEllipse(x, y, rad, colorA, colorB) {
 	currentCTX.save();
+	currentCTX.beginPath();
 	currentCTX.fillStyle = colorA;
 	currentCTX.ellipse(x, y, rad, rad, 0, 0, 6.28);
 	currentCTX.fill();
@@ -3650,15 +3812,13 @@ function drawRoundedRect(x, y, w, h, rad, colorA, colorB) {
 }
 
 class Vine extends Decoration {
-	constructor(x, y, level) {
-		const ind = Math.floor(Math.random() * 4);
+	constructor(x, y, level, ind) {
 		super(x, y, new Sprite(VINE_IMGS[ind]), level);
 	}
 }
 
 class Plant extends Decoration {
-	constructor(x, y, level) {
-		const ind = Math.floor(Math.random() * 4);
+	constructor(x, y, level, ind) {
 		super(x, y, new Sprite(PLANT_IMGS[ind]), level);
 	}
 }
@@ -3796,13 +3956,20 @@ class Actor extends PhysObj {
 		if (remainder !== 0) {
 			const ridingActors = super.getLevel().getAllRidingActors(this);
 			while (remainder !== 0) {
-				let collideObj = this.collideOffset(direction);
-				if (collideObj) {
-					const shouldBreak = onCollide(collideObj);
-					if (shouldBreak) {
-						break;
+				let collideObjs = this.collideOffset(direction);
+				let shouldBreak = false;
+				const runCollisionObjs = [];
+				collideObjs.some(c => {
+					if (c && onCollide(c)) {
+						runCollisionObjs.push(c);
+						shouldBreak = true;
+						return true;
 					}
+				});
+				if (shouldBreak) {
+					break;
 				}
+
 				super.incrX(direction.x);
 				ridingActors.forEach(actor => {
 					actor.moveX(direction.x, actor.onCollide);
@@ -3818,13 +3985,20 @@ class Actor extends PhysObj {
 		const direction = Vector({y: amount < 0 ? -1 : 1, x: 0});
 		if (remainder !== 0) {
 			while (remainder !== 0) {
-				let collideObj = this.collideOffset(direction);
-				if (collideObj) {
-					const shouldBreak = onCollide(collideObj);
-					if (shouldBreak) {
-						break;
+				let collideObjs = this.collideOffset(direction);
+				let shouldBreak = false;
+				const runCollisionObjs = [];
+				collideObjs.some(c => {
+					if (c && onCollide(c)) {
+						runCollisionObjs.push(c);
+						shouldBreak = true;
+						return true;
 					}
+				});
+				if (shouldBreak) {
+					break;
 				}
+
 				const ridingActors = super.getLevel().getAllRidingActors(this);
 
 				super.incrY(direction.y);
@@ -3970,6 +4144,82 @@ class Pedestal extends Solid {
 	}
 }
 
+class MultilineDialogue {
+	constructor(strs, x, y, xBoundL, xBoundR) {
+		this.strs = strs;
+		this.frame = 0;
+		this.ind = 0;
+		this.lastInd = 0;
+		this.x = x;
+		this.y = y;
+
+		this.xBoundL = xBoundL;
+		this.xBoundR = xBoundR;
+
+		this.playing = false;
+		this.strLengthSums = [0];
+		for (let i = 1; i < this.strs.length+1; ++i) {
+			this.strLengthSums.push(this.strLengthSums[i-1] + this.strs[i-1].length);
+		}
+
+		this.curChar = this.strs[0][0];
+	}
+
+	update() {
+		this.frame += timeDelta;
+		this.ind = Math.round(this.frame / 90);
+
+		if (this.curChar === " "){
+
+		} else if (this.ind > this.lastInd && this.ind < this.strLengthSums[this.strLengthSums.length-1]) {
+			let sfx = PONG_SFX;
+			// if (this.lastChar === " " || this.curChar == undefined) sfx = PING_SFX;
+			audioCon.playSoundEffect(sfx);
+		}
+
+		this.lastInd = this.ind;
+	}
+
+	draw() {
+		this.strs.forEach((str, i) => {
+			if (this.ind > this.strLengthSums[i]) {
+				const y = this.y + (i + 1) * 8;
+				writeText(str.substring(0, this.ind - this.strLengthSums[i]), 1, Vector({x: this.x, y: y}), "#ffffff");
+				this.curChar = str[this.ind - this.strLengthSums[i]];
+				this.lastChar = str[this.ind - this.strLengthSums[i] - 1];
+			}
+		});
+
+		
+	}
+
+	play() {this.playing = true;}
+	stop() {this.playing = false;}
+}
+
+dialogue = new MultilineDialogue(
+	[
+		"Foolish human!",
+		"You are bound to",
+		"my mask!",
+		"",
+		"Now see through my eyes!",
+		"",
+		"(Move your mouse to look)"
+	],
+	16, 36,
+	0, 128
+);
+
+dialogueThank = new MultilineDialogue(
+	[
+		"Thank you, human.",
+		"Now leave."
+	],
+	4 * 8 + 6, 6 * 8 + 6,
+	0, 128
+);
+
 function rotateRect(x, y, w, h, direction) {
 	const xgrid = x - x % TILE_SIZE, ygrid = y - y % TILE_SIZE;
 
@@ -4065,7 +4315,7 @@ class Spring extends Actor {
 		}
 		super.getSprite().setRow(1);
 		audioCon.playSoundEffect(SPRING_SFX);
-		game.spawnSpringParticles(this.getX(), this.getY());
+		game.spawnSpringParticles(this.getX(), this.getY(), "#7e2553");
 		// const numDusts = 3;
 		// for(let i = 0; i<numDusts; ++i) {
 		//     const vx = Math.sign(Math.random()-0.5);
@@ -4175,6 +4425,8 @@ class TwoEyeMask extends Mask {
 		this.eyeDistance = 80;
 		this.x = 0;
 		this.y = 0;
+
+		this.maskTime = -1;
 	}
 
 	update() {
@@ -4189,6 +4441,12 @@ class TwoEyeMask extends Mask {
 		v = v.scalar(speed / mag);
 		this.x += v.x;
 		this.y += v.y;
+	}
+
+	giveMask(maskTime) {
+		this.maskTime = maskTime;
+		audioCon.fadeOutSong(750);
+		audioCon.playSoundEffect(UNLOCK_SFX);
 	}
 
 	draw() {
@@ -4220,6 +4478,9 @@ class TwoEyeMask extends Mask {
 		// rightGrad.addColorStop(1, this.on ? "black" : "rgba(0,0,0,0)");
 		
 		// Set the fill style and draw a rectangle
+
+		
+
 		currentCTX.setTransform(1, 0, 0, this.yscale, 0, 0);
 		
 		currentCTX.fillStyle = leftGrad;
@@ -4227,6 +4488,8 @@ class TwoEyeMask extends Mask {
 		currentCTX.fillStyle = rightGrad;
 		currentCTX.fillRect(this.x + this.outerRad, 0, PIXEL_GAME_SIZE[0] * 2, PIXEL_GAME_SIZE[1] / this.yscale);
 		currentCTX.setTransform(1, 0, 0, 1, 0, 0);
+
+		
 	}
 
 	drawOther() {
@@ -4257,6 +4520,8 @@ class TwoEyeMask extends Mask {
 	}
 
 	isLookingAt(hitbox) {
+		if (game.maskTime > 0) return true;
+
 		//get distance from mouse pos to center
 		// return under threshold or not
 
@@ -4314,13 +4579,15 @@ class Angel extends Actor {
 		this.walkSprite.setRow(1);
 
 		this.sprite = this.sitSprite;
+		this.posessedSprite = new Sprite(ANGEL_POSESSED);
 
-		const clickMargin = 3;
+		const clickMargin = 5;
 		this.clickMargin = clickMargin;
 		this.clickHitbox = new Hitbox(this.getX() - clickMargin, this.getY() - clickMargin, 8 + clickMargin * 2, 10 + clickMargin * 2);
 	}
 
 	posess() {
+		if(game.maskTime > 0) return;
 		this.posessed = true;
 		this.walkDirection = 0;
 	}
@@ -4368,6 +4635,11 @@ class Angel extends Actor {
 	}
 
 	draw() {
+		if (this.posessed) {
+			this.posessedSprite.draw(this.getX(), this.getY() - 2);
+			return;
+		}
+
 		if (this.isSeen) {
 			this.sitSprite.draw(this.getX(), this.getY()-2);
 		} else {
@@ -4412,7 +4684,7 @@ class Angel extends Actor {
 				// 	this.setXVelocity(physObj.getXVelocity());
 				// }
 			} else if (this.isLeftOf(physObj) || this.isRightOf(physObj)) {
-				this.walkDirection *= -1;
+				if (!this.isSeen) this.walkDirection *= -1;
 				// if (this.getYVelocity() >= 0) this.setYVelocity(-0.5);
 				if (playerCollideFunction === "wall") {
 					this.getLevel().pushDustSprite(new GroundDustSprite(this.getX(), this.getY() - 3, 0, this.level, this.velocity.x < 0 ? VectorRight : VectorLeft))
@@ -4422,8 +4694,8 @@ class Angel extends Actor {
 		} else if (playerCollideFunction === "kill") {
 			return false;
 		} else if (playerCollideFunction.includes("button")) {
-			physObj.push();
-			return playerCollideFunction.includes("wall");
+			// physObj.push();
+			return false;
 		} else if (playerCollideFunction.includes("coin")) {
 			return false;
 		} else if (playerCollideFunction.includes("torch")) {
@@ -4440,7 +4712,7 @@ class Angel extends Actor {
 		if (this.getLevel().getPlayer().deathFrames !== 0) return;
 		
 		//todo: one posess at a time
-		if (!this.prevMouse && gMouseHeld && game.unlocks["POSESS"]) {
+		if (!this.prevMouse && gMouseHeld && game.unlocks["POSESS"] && game.maskTime < 3000) {
 			this.clickHitbox.setX(this.getX() - this.clickMargin);
 			this.clickHitbox.setY(this.getY() - this.clickMargin);
 			if (this.clickHitbox.containsPoint(gMousePos)) {
@@ -4478,30 +4750,31 @@ class Angel extends Actor {
 		}
 
 		if (this.walkDirection === 0) {
-			this.walkDirection = -Math.sign(this.getX() - this.level.getPlayer().getX());
+			this.walkDirection = this.sitSprite.flip ? -1 : 1;
 		}
 
 		const mask = this.game.mask;
 		this.isSeen = mask.isLookingAt(this.getHitbox());
 		
-		if (!this.isSeen) {
+		const onGround = this.isOnGround();
+
+		if (!this.isSeen && (onGround || this.getLevel().myLevelInd === 1)) {
 			this.setXVelocity(this.walkDirection * this.walkSpeed);
 			this.walkSprite.update();
 		}
 
-		if (!this.isOnGround()) {
+		if (!onGround) {
 			this.fall();
-			// if (this.getY() > this.throwHeight + 5 && !this.touchedIce) {
-			// 	this.velocity.x = 0;
-			// }
 		} else {
-			// this.setYVelocity(this.isOnGround().getYVelocity() * 0.9);
 			this.setXVelocity(this.getXVelocity() * 0.9);
+			// this.setYVelocity(this.isOnGround().getYVelocity() * 0.9);
+			// this.setXVelocity(this.getXVelocity() * 0.9);
 		}
 		
 		this.walkSprite.flip = this.walkDirection < 0;
 		if (!this.isSeen) {
 			this.sitSprite.flip = this.walkDirection < 0;
+			this.posessedSprite.flip = this.walkDirection < 0;
 		}
 
 		// if (this.getSprite().update) this.getSprite().update();
@@ -4514,350 +4787,6 @@ class Angel extends Actor {
 		} else {
 			return super.isOnGround();
 		}
-	}
-}
-
-let gPosessing = false;
-
-class Throwable extends Actor {
-	constructor(x, y, w, h, level) {
-		super(x, y, w, h, true, level);
-		this.throwVelocity = Vector({x: 1.7, y: -1.5});
-		this.onCollide = this.onCollide.bind(this);
-		this.squish = this.squish.bind(this);
-		this.beingCarried = false;
-		this.throwHeight = 0;
-		this.touchedIce = false;
-		this.pickingUp = false;
-		super.setSprite(
-			new AnimatedSprite(
-				THROWABLE_SPRITESHEET,
-				null,
-				[{frames: 0, onComplete: null}, {frames: 12, onComplete: "boomerang", nth: 2}],
-				w, h)
-		);
-		// super.setSprite(new Sprite())
-	}
-
-	onPlayerCollide() {
-		return ("wall throwable");
-	}
-
-	stopPickingUp() {
-		const player = super.getLevel().getPlayer();
-		this.setY(player.getY() - this.getHeight() - 2);
-		this.setX(player.getX());
-		this.pickingUp = false;
-	}
-
-	throw(direction) {
-		let throwV = direction === VectorLeft ? this.throwVelocity.scalarX(-1) : this.throwVelocity;
-		this.stopPickingUp();
-		if (this.getSprite().setRow) this.getSprite().setRow(0);
-		this.setVelocity(throwV);
-		this.touchedIce = false;
-		this.beingCarried = false;
-		this.throwHeight = this.getY();
-	}
-
-	squish() {
-		this.getLevel().killPlayer();
-	}
-
-	startCarrying() {
-		this.pickingUp = 1;
-		this.beingCarried = true;
-		if (this.getSprite().setRow) this.getSprite().setRow(1);
-	}
-
-	respawnClone(level) {
-		return new Throwable(this.spawn.x, this.spawn.y, this.origW, this.origH, level);
-	}
-
-	isOverlap(physObj, offset) {
-		const norm = super.isOverlap(physObj, offset);
-		if (this.beingCarried) {
-			return physObj !== super.getLevel().getPlayer() && norm;
-		} else {
-			return norm;
-		}
-	}
-
-	onCollide(physObj) {
-		const playerCollideFunction = physObj.onPlayerCollide(this);
-		if (playerCollideFunction === "spring") {
-			physObj.bounceObj(this);
-			this.touchedIce = true;
-		} else if (playerCollideFunction.includes("wall") && physObj.collidable) {
-			if (physObj.isOnTopOf(this)) {
-				//Bonk head
-				if (playerCollideFunction === "") {
-					// physObj.incrY(-10, physObj.onCollide);
-				} else {
-					this.setYVelocity(0);
-				}
-			} else if (this.isOnTopOf(physObj)) {
-				//Land on ground
-				this.setYVelocity(physObj.getYVelocity());
-				if (!this.isOnIce() && this.throwHeight > this.getHeight() + 24) {
-					this.setXVelocity(physObj.getXVelocity());
-				}
-			} else if (this.isLeftOf(physObj) || this.isRightOf(physObj)) {
-				if (this.getYVelocity() >= 0) this.setYVelocity(-0.5);
-				if (playerCollideFunction === "wall") {
-					this.getLevel().pushDustSprite(new GroundDustSprite(this.getX(), this.getY() - 3, 0, this.level, this.velocity.x < 0 ? VectorRight : VectorLeft))
-				}
-				this.setXVelocity(0);
-			}
-		} else if (playerCollideFunction === "kill") {
-			return false;
-		} else if (playerCollideFunction.includes("button")) {
-			physObj.push();
-			return playerCollideFunction.includes("wall");
-		}
-		return true;
-	}
-
-	isOnGround() {
-		if (this.isOnTopOf(super.getLevel().getPlayer())) {
-			return super.getLevel().getPlayer()
-		} else {
-			return super.isOnGround();
-		}
-	}
-
-	pickUpFrames = 12;
-
-	incrPickupFrames() {
-		const player = super.getLevel().getPlayer();
-		const tx = this.getX();
-		const ty = this.getY();
-		const px = player.getX();
-		const py = player.getY() - this.getHeight() - 2;
-		//Move closer to target pos
-		let xOffset = Math.floor((px - tx) * this.pickingUp / this.pickUpFrames);
-		let yOffset = Math.ceil((py - ty) * this.pickingUp / this.pickUpFrames);
-
-		//Check to make sure there's nothing in the way in the x direction
-		let collideObj = super.getLevel().checkCollide(this, Vector({x: xOffset, y: 0}));
-		if (collideObj) {
-			//If there is something in the way, don't move the box in the x direction
-			xOffset = 0;
-		}
-		//Check to make sure there's nothing in the way in the y direction
-		collideObj = super.getLevel().checkCollide(this, Vector({x: 0, y: yOffset}));
-		if (collideObj) {
-			//If there is something in the way, move the player and the box down
-			player.moveY(-1 * yOffset, player.squish);
-			yOffset = 0;
-		}
-
-		this.setX(tx + xOffset);
-		this.setY(ty + yOffset);
-		this.pickingUp += 1;
-	}
-
-	fall() {
-		this.setYVelocity(Math.min(MAXFALL, this.velocity.y + (this.velocity.y > 0 ? PLAYER_GRAVITY_UP : PLAYER_GRAVITY_DOWN)));
-	}
-
-	updatePhysicsPos() {
-		if (this.getLevel().getPlayer().deathFrames === 0) {
-			if (this.pickingUp) {
-				if (this.pickingUp < this.pickUpFrames) {
-					this.incrPickupFrames();
-				} else {
-					this.stopPickingUp();
-				}
-			} else if (this.beingCarried) {
-
-			} else {
-				super.updatePhysicsPos();
-				if (!this.isOnGround()) {
-					this.fall();
-					if (this.getY() > this.throwHeight + 5 && !this.touchedIce) {
-						this.velocity.x = 0;
-					}
-				} else {
-					if (!this.isOnIce()) {
-						this.velocity.x = 0;
-						this.touchedIce = false;
-					} else {
-						this.touchedIce = true;
-					}
-					this.setYVelocity(this.isOnGround().getYVelocity() * 0.9);
-
-				}
-			}
-			if (this.getSprite().update) this.getSprite().update();
-		}
-	}
-}
-
-class StickyThrowable extends Throwable {
-	constructor(x, y, w, h, level) {
-		super(x, y, w, h, level);
-		this.onCollide = this.onCollide.bind(this);
-		this.stuck = null;
-	}
-
-	onPlayerCollide() {
-		return "wall sticky throwable";
-	}
-
-	respawnClone(level) {
-		return new StickyThrowable(this.spawn.x, this.spawn.y, this.origW, this.origH, level);
-	}
-
-	draw() {
-		super.draw();
-		recolorImage(this.getX() + game.cameraOffset.x, this.getY() + game.cameraOffset.y, hexToRgb("#ffffa300"), hexToRgb("#ffff77a9"));
-		recolorImage(this.getX() + game.cameraOffset.x, this.getY() + game.cameraOffset.y, hexToRgb("#ffaf5236"), hexToRgb("#ff7e2553"));
-	}
-
-	startCarrying() {
-		super.startCarrying();
-		this.stuck = null;
-	}
-
-	fall() {
-		if (!this.stuck || this.stuck.onPlayerCollide(this).includes("ice")) {
-			super.fall();
-		}
-	}
-
-	onCollide(physObj) {
-		const playerCollideFunction = physObj.onPlayerCollide(this);
-		if (playerCollideFunction === "spring") {
-			physObj.bounceObj(this);
-			super.touchedIce = true;
-			// return true;
-			// this.velocity.y = -3;
-			// physObj.bounce();
-		} else if (playerCollideFunction.includes("wall") && physObj.collidable) {
-			if (this.isOverlap(physObj, VectorZero)) {
-				//Must have tunneled through the wall bc of a spike
-				const px = physObj.getX();
-				if (this.getXVelocity() > 0) {
-					//If moving right, push back left
-					this.setX(px - this.getWidth());
-				} else {
-					this.setX(px + physObj.getWidth());
-				}
-			}
-			if (physObj.isOnTopOf(this)) {
-				//Bonk head
-				if (playerCollideFunction === "") {
-					physObj.moveY(-1, physObj.onCollide);
-				} else {
-					this.setYVelocity(0);
-				}
-			} else if (this.isOnTopOf(physObj)) {
-				//Land on ground
-				this.setYVelocity(physObj.getYVelocity() * 0.9);
-				if (!this.isOnIce()) {
-					this.setXVelocity(physObj.getXVelocity());
-				}
-			} else if (this.isLeftOf(physObj) || this.isRightOf(physObj)) {
-				if (!playerCollideFunction.includes("ice")) {
-					this.setYVelocity(0);
-					this.stuck = physObj;
-				}
-				if (playerCollideFunction === "wall") {
-					this.getLevel().pushDustSprite(new GroundDustSprite(this.getX(), this.getY() - 3, 0, this.level, this.velocity.x > 0 ? VectorLeft : VectorRight))
-				}
-				this.setXVelocity(0);
-			}
-		} else if (playerCollideFunction === "kill") {
-			return false;
-		} else if (playerCollideFunction.includes("button")) {
-			physObj.push();
-			return playerCollideFunction.includes("wall");
-		}
-		return true;
-	}
-}
-
-function drawLine(x0, y0, x1, y1) {
-	const dx = Math.abs(x1 - x0);
-	const dy = Math.abs(y1 - y0);
-	const sx = (x0 < x1) ? 1 : -1;
-	const sy = (y0 < y1) ? 1 : -1;
-	let err = dx - dy;
-	while (true) {
-		currentCTX.fillRect(x0 + game.cameraOffset.x, y0 + game.cameraOffset.y, 1, 1); // Do what you need to for this
-		if (Math.abs(x0 - x1) < 0.01 && Math.abs(y0 - y1) < 0.01) break;
-		const e2 = 2 * err;
-		if (e2 > -dy) {
-			err -= dy;
-			x0 += sx;
-		}
-		if (e2 < dx) {
-			err += dx;
-			y0 += sy;
-		}
-	}
-}
-
-class DiamondThrowable extends StickyThrowable {
-	constructor(x, y, w, h, level) {
-		super(x, y, w, h, level);
-		this.setSprite(new Sprite(DIAMOND_IMGS[0], null));
-	}
-
-	onPlayerCollide() {
-		return super.onPlayerCollide() + "diamond"
-	}
-
-	respawnClone(level) {
-		return new DiamondThrowable(this.spawn.x, this.spawn.y, this.getWidth(), this.getHeight(), this.getLevel());
-	}
-
-	draw() {
-		if (this.beingCarried) {
-			this.drawLines();
-		}
-		this.getSprite().draw(this.getX() - 1, this.getY() - 2);
-	}
-
-	updatePhysicsPos() {
-		super.updatePhysicsPos();
-	}
-
-	startCarrying() {
-		super.startCarrying();
-		game.endGame();
-	}
-
-	drawLineAround(x, y, angle, rad1, rad2) {
-		let xCos = Math.cos(angle);
-		let ySin = Math.sin(angle);
-		let x0 = Math.round(x + xCos * rad1);
-		let y0 = Math.round(y + ySin * rad1);
-		let x1 = Math.round(x + xCos * rad2);
-		let y1 = Math.round(y + ySin * rad2);
-		drawLine(x0, y0, x1, y1);
-	}
-
-	drawLines() {
-		const numLines = 16;
-		const radOff = 0.5 * Math.sin(game.animFrame / 30 * Math.PI);
-		for (let i = 0; i < numLines; ++i) {
-			let angle = 2 * Math.PI * (i + game.animFrame / 30) / numLines;
-			currentCTX.fillStyle = "#7e2553a0";
-			this.drawLineAround(this.getX() + 2, this.getY() + 2, angle, 20, 28 + radOff);
-			if (i % 2 === 0) {
-				currentCTX.fillStyle = "#ff004de0";
-				this.drawLineAround(this.getX() + 2, this.getY() + 2, -angle, 8, 16);
-			}
-		}
-		drawEllipse(this.getX() + 3, this.getY() + 3, 36 + radOff * 2, "rgba(255, 162, 0, 0.3)", "rgba(255, 162, 0, 0)");
-		// const offset = Math.sin(game.animFrame/60*2*Math.PI);
-		// const colorA = "rgba(255, 162, 0, 0.5)";
-		// const colorB = "rgba(255, 231, 252, 0.4)";
-		// drawEllipse(this.getX()+3, this.getY()+3, 18+offset*0.5, Math.floor(game.animFrame/20)%2===0 ? colorA : colorB);
-		// drawEllipse(this.getX()+3, this.getY()+3, 10+offset, Math.floor(game.animFrame/20)%2===0 ? colorB : colorA);
-
 	}
 }
 
@@ -4972,8 +4901,8 @@ class Player extends Actor {
 	drawLight() {
 		const x = this.getX();
 		const y = this.getY();
-
-		drawEllipse(x + 3, y + 3, 16, "#3b1d2b");
+		const offset = Math.sin(Math.PI * game.animFrame / 30) * 0.6;
+		drawEllipse(x + 3, y + 3, 16 + offset, "#3b1d2b");
 	}
 
 	draw() {
@@ -5516,6 +5445,96 @@ class Powerup extends Button {
 	}
 }
 
+class GoldenGuy extends Button {
+	constructor(x, y, level) {
+		super(x, y, 18, 16, level);
+		this.sprite = new Sprite(
+			GOLDEN_GUY,
+		);
+		this.giveMask = this.giveMask.bind(this);
+		this.giveMaskTime = -1;
+
+		this.maskSprite = new Sprite(MASK_ON_GUY);
+	}
+
+	update() {
+		super.update();
+
+	}
+
+	giveMask() {
+		this.giveMaskTime = window.performance.now();
+		game.giveMask(this.giveMaskTime);
+	}
+
+	draw() {
+		this.sprite.draw(this.getX(), this.getY());
+
+		const now = window.performance.now();
+		if (this.giveMaskTime >= 0 && now - this.giveMaskTime < 6000) {
+			let alpha = (now - this.giveMaskTime - 1000) / 3000;
+			alpha = Math.max(0, alpha);
+			const prevAlpha = currentCTX.globalAlpha;
+			currentCTX.globalAlpha = alpha;
+			this.maskSprite.draw(this.getX(), this.getY());
+			currentCTX.globalAlpha = prevAlpha;
+		} else if (this.giveMaskTime >= 0) {
+			this.maskSprite.draw(this.getX(), this.getY());
+		}
+	}
+
+	onPlayerCollide() {
+		return "coin";
+	}
+
+	push() {
+		if (this.pushed) return;
+		super.collidable = false;
+		this.pushed = true;
+		this.giveMask();
+		this.collidable = false;
+		// this.getSprite().setRow(1);
+	}
+}
+
+class MaskPickup extends Button {
+	constructor(x, y, level) {
+		super(x, y, 24, 24, level);
+		this.sprite = new Sprite(
+			MASK_ON_GUY,
+		);
+		this.getMask = this.getMask.bind(this);
+		this.getMaskTime = -1;
+	}
+
+	getMask() {
+		game.getMask();
+	}
+
+	draw() {
+		if (this.pushed) return;
+		const offset = Math.sin(Math.PI * game.animFrame / 30 + this.timingOffset) * 0.3;
+		const yOffset = Math.round(Math.sin(Math.PI * game.animFrame / 30) * 0.6);
+		this.sprite.draw(this.getX(), this.getY() + Math.trunc(yOffset));
+	}
+
+	onPlayerCollide() {
+		return "coin";
+	}
+
+	push() {
+		if (this.pushed) return;
+		super.collidable = false;
+		this.pushed = true;
+		this.getMask();
+		this.collidable = false;
+		audioCon.playSoundEffect(UNLOCK_SFX);
+
+		audioCon.playSong(LOOP1_MUSIC)
+		// this.getSprite().setRow(1);
+	}
+}
+
 class Torch extends Button {
 	constructor(x, y, level, centerTile, onPush) {
 		super(x-2, y, 12, 20, level, onPush);
@@ -5534,7 +5553,7 @@ class Torch extends Button {
 	draw() {
 		const yOffset = Math.round(Math.sin(Math.PI * game.animFrame / 30) * 0.72);
 		this.torchSprite.draw(this.getX() + this.offset, this.getY() + 9 + yOffset);
-		this.sprite.draw(this.getX() + this.offset, this.getY() + 2 + yOffset);
+		if (this.pushed) this.sprite.draw(this.getX() + this.offset, this.getY() + 2 + yOffset);
 	}
 
 	onPlayerCollide() {
@@ -5658,6 +5677,8 @@ let keys = {
 	"KeyA": 0,
 	"KeyS": 0,
 	"KeyD": 0,
+
+	"Space": 0
 	// "KeyN": 0,
 	// "KeyM": 0,
 };
@@ -5672,7 +5693,7 @@ function diagnostics() {
 	if (!paused) {
 		diagnosticFrameCount++;
 		diagnosticTime += timeDelta;
-		if (diagnosticFrameCount === 100) {
+		if (diagnosticFrameCount === 1000) {
 			frameRate = diagnosticTime / diagnosticFrameCount;
 			console.log(frameRate);
 			diagnosticTime = 0;
@@ -5740,6 +5761,123 @@ function keyUpHandler(event) {
 	}
 }
 
+const hor = Vector({x: 1, y: 0});
+const ver = Vector({x: 0, y: 0});
+const br = Vector({x: 0, y: 1});
+const bl = Vector({x: 1, y: 1});
+const tr = Vector({x: 0, y: 2});
+const tl = Vector({x: 1, y: 2});
+
+function lvl9Wires(wires) {
+	wires.push(new Wire(1, 2, ver, this));
+	wires.push(new Wire(1, 3, ver, this));
+	wires.push(new Wire(1, 4, tr, this));
+	wires.push(new Wire(2, 4, bl, this));
+	wires.push(new Wire(2, 5, ver, this));
+	wires.push(new Wire(2, 6, ver, this));
+	wires.push(new Wire(2, 7, ver, this));
+	wires.push(new Wire(2, 8, ver, this));
+	wires.push(new Wire(2, 9, ver, this));
+	wires.push(new Wire(2, 10, ver, this));
+}
+
+function lvl3Wires(wires) {
+	wires.push(new Wire(6, 2, hor, this));
+	wires.push(new Wire(7, 2, hor, this));
+	wires.push(new Wire(8, 2, hor, this));
+	wires.push(new Wire(9, 2, hor, this));
+	wires.push(new Wire(10, 2, hor, this));
+	wires.push(new Wire(11, 2, hor, this));
+	wires.push(new Wire(12, 2, hor, this));
+	wires.push(new Wire(13, 2, hor, this));
+	wires.push(new Wire(14, 2, hor, this));
+	wires.push(new Wire(15, 2, bl, this));
+	wires.push(new Wire(15, 3, ver, this));
+	wires.push(new Wire(15, 4, ver, this));
+}
+
+function lvl19Wires(wires) {
+	wires.push(new Wire(0, 9, tr, this));
+	wires.push(new Wire(1, 9, bl, this));
+	wires.push(new Wire(0, 8, ver, this));
+	wires.push(new Wire(0, 7, ver, this));
+	wires.push(new Wire(0, 6, ver, this));
+	wires.push(new Wire(0, 5, ver, this));
+}
+
+function lvl5Wires(wires) {
+	wires.push(new Wire(1, 8, tl, this));
+	wires.push(new Wire(0, 8, br, this));
+	wires.push(new Wire(0, 9, ver, this));
+	wires.push(new Wire(0, 10, ver, this));
+	wires.push(new Wire(0, 11, ver, this));
+	wires.push(new Wire(0, 12, ver, this));
+	wires.push(new Wire(0, 13, ver, this));
+	wires.push(new Wire(0, 14, ver, this));
+	wires.push(new Wire(0, 15, tr, this));
+
+	wires.push(new Wire(1, 15, hor, this));
+	wires.push(new Wire(2, 15, hor, this));
+	wires.push(new Wire(3, 15, hor, this));
+	wires.push(new Wire(4, 15, hor, this));
+	wires.push(new Wire(5, 15, hor, this));
+	wires.push(new Wire(6, 15, hor, this));
+	wires.push(new Wire(7, 15, hor, this));
+	wires.push(new Wire(8, 15, tl, this));
+
+	wires.push(new Wire(8, 14, ver, this));
+	wires.push(new Wire(8, 13, br, this));
+	wires.push(new Wire(9, 13, hor, this));
+	wires.push(new Wire(10, 13, hor, this));
+	wires.push(new Wire(11, 13, hor, this));
+	wires.push(new Wire(12, 13, tl, this));
+	wires.push(new Wire(12, 12, ver, this));
+	wires.push(new Wire(12, 11, ver, this));
+	wires.push(new Wire(12, 10, ver, this));
+}
+
+function lvl18Wires(wires) {
+	wires.push(new Wire(14, 8, ver, this));
+	wires.push(new Wire(14, 9, ver, this));
+	wires.push(new Wire(14, 10, ver, this));
+	wires.push(new Wire(14, 11, ver, this));
+	wires.push(new Wire(14, 12, ver, this));
+	wires.push(new Wire(14, 13, ver, this));
+	wires.push(new Wire(14, 14, ver, this));
+	wires.push(new Wire(14, 15, tl, this));
+	wires.push(new Wire(13, 15, hor, this));
+	wires.push(new Wire(12, 15, hor, this));
+	wires.push(new Wire(11, 15, hor, this));
+	wires.push(new Wire(10, 15, hor, this));
+	wires.push(new Wire(9, 15, hor, this));
+	wires.push(new Wire(8, 15, hor, this));
+	wires.push(new Wire(7, 15, hor, this));
+	wires.push(new Wire(6, 15, hor, this));
+	wires.push(new Wire(5, 15, hor, this));
+	wires.push(new Wire(4, 15, hor, this));
+	wires.push(new Wire(3, 15, hor, this));
+	wires.push(new Wire(2, 15, hor, this));
+	wires.push(new Wire(1, 15, hor, this));
+	wires.push(new Wire(0, 15, tr, this));
+	wires.push(new Wire(0, 14, ver, this));
+	wires.push(new Wire(0, 13, ver, this));
+	wires.push(new Wire(0, 12, ver, this));
+}
+
+function lvl11Wires(wires) {
+	wires.push(new Wire(12, 2, hor, this));
+	wires.push(new Wire(11, 2, hor, this));
+	wires.push(new Wire(10, 2, tr, this));
+	wires.push(new Wire(10, 1, ver, this));
+	wires.push(new Wire(10, 0, bl, this));
+	wires.push(new Wire(9, 0, hor, this));
+	wires.push(new Wire(8, 0, hor, this));
+	wires.push(new Wire(7, 0, hor, this));
+	wires.push(new Wire(6, 0, hor, this));
+	wires.push(new Wire(5, 0, hor, this));
+	
+}
+
 function getMousePos(evt) {
 	var rect = canvas.getBoundingClientRect(), // abs. size of element
 		scaleX = canvas.width / rect.width,    // relationship bitmap vs. element for x
@@ -5750,9 +5888,9 @@ function getMousePos(evt) {
 	});
 }
 
-canvas.ondblclick = () => {
-	toggleFullscreen();
-};
+// canvas.ondblclick = () => {
+// 	toggleFullscreen();
+// };
 
 let gMousePos = Vector({x: 0, y: 0});
 
@@ -5769,3 +5907,8 @@ document.body.onmousedown = (evt) => {
 document.body.onmouseup = (evt) => {
 	gMouseHeld = false;
 }
+
+canvas.oncontextmenu = function(e) { e.preventDefault(); e.stopPropagation(); }
+
+//todo: jump space bar
+// todo: try torches again
