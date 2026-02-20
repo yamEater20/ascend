@@ -1538,8 +1538,8 @@ class Game {
 	setKeys(keys) {
 		keys["moveLeft"] = keys["ArrowLeft"] || keys["KeyA"];
 		keys["moveRight"] = keys["ArrowRight"] || keys["KeyD"];
-		keys["jump"] = keys["KeyZ"] || keys["KeyN"];
-		keys["slide"] = keys["KeyX"] || keys["KeyM"];
+		keys["jump"] = keys["KeyZ"] || keys["KeyN"] || keys["Space"] || keys["KeyW"];
+		keys["slide"] = keys["KeyX"] || keys["KeyM"] || keys["KeyS"];
 
 		if (keys["ArrowLeft"] || keys["ArrowRight"]) this.controlScheme = 0;
 		if (keys["KeyA"] || keys["KeyD"]) this.controlScheme = 1;
@@ -5022,6 +5022,7 @@ let keys = {
 	"KeyD": 0,
 	"KeyN": 0,
 	"KeyM": 0,
+	"Space": 0,
 };
 
 let diagnosticFrameCount = 0;
