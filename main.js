@@ -697,7 +697,7 @@ class AudioController {
 		this.curSong = null;
 	}
 
-	playSoundEffect(s, onEnd) {
+	playSoundEffect(s, onEnd, dontRandomize) {
 		onEnd = onEnd ? onEnd : () => {
 		};
 		s.on('end', () => {
@@ -705,6 +705,7 @@ class AudioController {
 			onEnd();
 		});
 		s.volume(this.getMaxVolume(s) * this.sfxVolume);
+		if (!dontRandomize) s.rate(Math.random() * 0.2 + 0.9);
 		s.play();
 		this.curSoundEffect = s;
 	}
@@ -2287,7 +2288,7 @@ class Level {
 						
 						const onPickup = (unlock, particleColor, music) => {
 							game.unlocks[unlock] = true;
-							audioCon.playSoundEffect(UNLOCK_SFX);
+							audioCon.playSoundEffect(UNLOCK_SFX, null, true);
 							audioCon.queueSong(music);
 							game.spawnPowerupParticles(x, y, particleColor);
 							game.showHintText();
@@ -3068,7 +3069,7 @@ class OOBScreen {
 		this.frame += timeDelta;
 		this.ind = Math.round(this.frame / 100);
 
-		if (this.ind > this.lastInd && this.ind < this.strLengthSums[this.strLengthSums.length-1]) audioCon.playSoundEffect(Math.random() > 0.5 ? PONG_SFX : PING_SFX);
+		if (this.ind > this.lastInd && this.ind < this.strLengthSums[this.strLengthSums.length-1]) audioCon.playSoundEffect(PONG_SFX);
 
 		this.lastInd = this.ind;
 	}
