@@ -1542,8 +1542,36 @@ class Game {
 		keys["jump"] = keys["KeyZ"] || keys["KeyN"] || keys["Space"] || keys["KeyW"];
 		keys["slide"] = keys["KeyX"] || keys["KeyM"] || keys["KeyS"];
 
+		let keyC = keys["KeyC"];
+		let rightTrigger = false;
+
 		if (keys["ArrowLeft"] || keys["ArrowRight"]) this.controlScheme = 0;
 		if (keys["KeyA"] || keys["KeyD"]) this.controlScheme = 1;
+
+		const gamepad = navigator.getGamepads()[0];
+		if (gamepad && gamepad.buttons && gamepad.axes) {
+			const buttons = gamepad.buttons;
+			const buttonA = buttons[0].pressed;
+			const buttonB = buttons[1].pressed;
+			const buttonX = buttons[2].pressed;
+			const buttonY = buttons[3].pressed;
+
+			const moveLeft = gamepad.axes[0] < -0.2;
+			const moveRight = gamepad.axes[0] > 0.2;
+			rightTrigger = gamepad.axes[5] > 0;
+			
+			keys["moveLeft"] |= moveLeft;
+			keys["moveRight"] |= moveRight;
+			keys["jump"] |= buttonB || buttonY;
+			keys["slide"] |= buttonA || buttonX;
+			if (gamepad.axes[4] > 0) {
+				keys["KeyR"] = 1;
+			}
+			console.log(gamepad.axes[4] > 0, keys["KeyR"]);
+			if (rightTrigger) keyC = 1;
+
+			if (moveLeft || moveRight) this.controlScheme = 2;
+		}
 
 		if (!optionsCon.showing) {
 			if (keys["KeyO"] && !this.prevO) {
@@ -1564,7 +1592,6 @@ class Game {
 
 			if (this.startTime < 1  && (keys["moveLeft"] || keys["moveRight"])) this.startTime = window.performance.now();
 			
-			const keyC = keys["KeyC"]
 			if (this.onLastLevel() && this.getCurrentLevel().endGameFrames !== 0) {
 				//Suppress c input
 			} else {
@@ -1582,7 +1609,7 @@ class Game {
 			this.prevI = keys["KeyI"];
 			this.prevS = keys["KeyP"];
 			this.prevZ = keys["jump"];
-			this.prevC = keys["KeyC"];
+			this.prevC = keys["KeyC"] || rightTrigger;
 
 			this.getCurrentLevel().setKeys(keys);
 		} else {
@@ -1592,6 +1619,8 @@ class Game {
 			optionsCon.toggleOptions();
 		}
 		this.prevEnter = keys["Enter"];
+
+		keys["KeyR"] = 0;
 	}
 
 	cAudio(keyC, prevC) {
@@ -1857,6 +1886,11 @@ const keyNames = [
 		"slide": "M",
 		"restart": "R",
 		"map": "C"
+	}, {
+		"jump": "B",
+		"slide": "A",
+		"restart": "R",
+		"map": "RT"
 	}, 
 ]
 
@@ -5066,6 +5100,7 @@ const toggleFullscreen = (event) => {
 
 function g() {
 	clearCanvas();
+
 	game.updateLevelPhysicsPos();
 	game.setKeys(keys);
 	game.drawCurrentLevel();
