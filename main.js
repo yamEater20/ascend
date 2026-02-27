@@ -1562,12 +1562,11 @@ class Game {
 			
 			keys["moveLeft"] |= moveLeft;
 			keys["moveRight"] |= moveRight;
-			keys["jump"] |= buttonB || buttonY;
-			keys["slide"] |= buttonA || buttonX;
+			keys["jump"] |= buttonA || buttonX;
+			keys["slide"] |= buttonB || buttonY;
 			if (gamepad.axes[4] > 0) {
 				keys["KeyR"] = 1;
 			}
-			console.log(gamepad.axes[4] > 0, keys["KeyR"]);
 			if (rightTrigger) keyC = 1;
 
 			if (moveLeft || moveRight) this.controlScheme = 2;
@@ -1887,8 +1886,8 @@ const keyNames = [
 		"restart": "R",
 		"map": "C"
 	}, {
-		"jump": "B",
-		"slide": "A",
+		"jump": "A",
+		"slide": "B",
 		"restart": "R",
 		"map": "RT"
 	}, 
